@@ -7,6 +7,12 @@ body,
   font-family: ui-rounded, 'Nunito', system-ui, sans-serif;
 }
 
+.label-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
 .hud {
   position: fixed;
   top: 16px;

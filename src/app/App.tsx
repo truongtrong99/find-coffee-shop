@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { firstSession } from '../content/v1'
 import { LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
@@ -43,11 +43,13 @@ function Hud() {
 
 export function App() {
   useGameLoop()
+  const labelLayer = useRef<HTMLDivElement>(null)
   return (
     <>
       <Canvas orthographic shadows camera={{ position: [8, 8, 8], zoom: 90, near: 0.1, far: 100 }}>
-        <LabScene />
+        <LabScene labelLayer={labelLayer} />
       </Canvas>
+      <div ref={labelLayer} className="label-layer" />
       <Hud />
     </>
   )

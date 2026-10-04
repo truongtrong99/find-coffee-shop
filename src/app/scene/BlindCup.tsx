@@ -1,4 +1,5 @@
 import { Html } from '@react-three/drei'
+import type { RefObject } from 'react'
 import { Color } from 'three'
 import { content } from '../../content/v1'
 
@@ -11,6 +12,8 @@ interface BlindCupProps {
   letter: string
   temperature: number
   position: [number, number, number]
+  /** Stable DOM layer for labels; without it drei's Html can lose a label when its default target changes on mount. */
+  labelLayer: RefObject<HTMLDivElement | null>
 }
 
 function Thermometer({ temperature }: { temperature: number }) {
@@ -34,19 +37,19 @@ function Thermometer({ temperature }: { temperature: number }) {
   )
 }
 
-export function BlindCup({ letter, temperature, position }: BlindCupProps) {
+export function BlindCup({ letter, temperature, position, labelLayer }: BlindCupProps) {
   return (
     <group position={position}>
       <mesh position={[0, 0.25, 0]} castShadow>
         <cylinderGeometry args={[0.45, 0.35, 0.5, 32]} />
         <meshStandardMaterial color="#fffaf0" />
       </mesh>
-      <mesh position={[0, 0.46, 0]}>
-        <cylinderGeometry args={[0.37, 0.37, 0.02, 32]} />
+      <mesh position={[0, 0.505, 0]}>
+        <cylinderGeometry args={[0.4, 0.4, 0.01, 32]} />
         <meshStandardMaterial color="#4b2c1a" />
       </mesh>
       <Thermometer temperature={temperature} />
-      <Html position={[0, 1.2, 0]} center zIndexRange={[10, 0]}>
+      <Html position={[0, 1.2, 0]} center zIndexRange={[10, 0]} portal={labelLayer as RefObject<HTMLElement>}>
         <div className="cup-label">
           Cup {letter}
           <small>{Math.round(temperature)}°C</small>

@@ -1,3 +1,4 @@
+import type { RefObject } from 'react'
 import { useGameStore } from '../store'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
@@ -32,7 +33,7 @@ function Table() {
   )
 }
 
-export function LabScene() {
+export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement | null> }) {
   const cups = useGameStore((s) => s.attempt.cups)
   const offset = ((cups.length - 1) * CUP_SPACING) / 2
   return (
@@ -51,7 +52,13 @@ export function LabScene() {
 
       <Table />
       {cups.map((cup, i) => (
-        <BlindCup key={cup.letter} letter={cup.letter} temperature={cup.temperature} position={[i * CUP_SPACING - offset, 1, 0]} />
+        <BlindCup
+          key={cup.letter}
+          letter={cup.letter}
+          temperature={cup.temperature}
+          position={[i * CUP_SPACING - offset, 1, 0]}
+          labelLayer={labelLayer}
+        />
       ))}
       <Cupper position={[0, 0, 2.2]} />
     </>
