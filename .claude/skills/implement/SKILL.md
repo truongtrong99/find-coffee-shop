@@ -10,6 +10,6 @@ Use /tdd where possible, at pre-agreed seams.
 
 Run typechecking regularly, single test files regularly, and the full test suite once at the end.
 
-Once done, use /code-review to review the work.
+Before starting, note the current commit as the review's fixed point.
 
-Commit your work to the current branch.
+Once done, commit your work to the current branch, then use /code-review against that fixed point. Commit any fixes from the review on top.
