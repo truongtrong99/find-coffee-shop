@@ -8,7 +8,7 @@ import { createServer } from 'vite'
  * Serves the game with Vite, opens it in headless Chromium and runs `drive(page)`, then reports.
  * Sets a non-zero exit code if `drive` throws or the page logged any console error or uncaught exception.
  */
-export async function withGamePage({ width = 1100, height = 700 }, drive) {
+export async function withGamePage(drive, { width = 1100, height = 700 } = {}) {
   const server = await createServer({ server: { port: 0 }, logLevel: 'error' })
   await server.listen()
   const url = server.resolvedUrls.local[0]

@@ -13,7 +13,10 @@ const { values } = parseArgs({
   },
 })
 
-await withGamePage({ width: Number(values.width), height: Number(values.height) }, async (page) => {
-  await page.waitForTimeout(Number(values.wait))
-  await screenshot(page, values.out)
-})
+await withGamePage(
+  async (page) => {
+    await page.waitForTimeout(Number(values.wait))
+    await screenshot(page, values.out)
+  },
+  { width: Number(values.width), height: Number(values.height) },
+)

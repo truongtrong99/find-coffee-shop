@@ -7,53 +7,66 @@ import { screenshot, withGamePage } from './browser.mjs'
 
 const CUPPING_STEPS = ['Dry Fragrance', 'Pour', 'Break the Crust', 'Skim', 'Slurp']
 const ATTRIBUTES = ['Aroma', 'Flavor', 'Acidity', 'Body', 'Sweetness']
+const RATINGS = [1, 2, 3, 4, 5]
 
-await withGamePage({}, async (page) => {
+/** Waits for `locator` to reach `state`, failing with `failure` if it doesn't within a few seconds. */
+async function expectState(locator, failure, state = 'visible') {
+  try {
+    await locator.waitFor({ state, timeout: 5000 })
+  } catch {
+    throw new Error(failure)
+  }
+}
+
+await withGamePage(async (page) => {
   // Lineup: seat the first NPC Cupper so the Reveal shows an NPC Score Card beside the Player's.
   const lineup = page.getByRole('region', { name: 'Lineup' })
   await lineup.getByRole('group', { name: 'NPC Cuppers' }).getByRole('button').first().click()
   await lineup.getByRole('button', { name: 'Start cupping' }).click()
 
   const panel = page.getByRole('complementary', { name: 'Cupping' })
-  const cupButtons = panel.getByRole('group', { name: 'Blind Cups' }).getByRole('button')
-  const submit = panel.getByRole('button', { name: 'Submit' })
-  await cupButtons.first().waitFor()
-  const letters = (await cupButtons.allInnerTexts()).map((text) => text.match(/^Cup (\w)/)[1])
+  const cupPicker = panel.getByRole('group', { name: 'Blind Cups' })
+  const cupButton = (letter) => cupPicker.getByRole('button', { name: new RegExp(`^Cup ${letter}\\b`) })
+  const submitWhen = (disabled) => panel.getByRole('button', { name: 'Submit', disabled })
+  await cupPicker.getByRole('button').first().waitFor()
+  const letters = (await cupPicker.getByRole('button').allInnerTexts()).map((text) => text.match(/^Cup (\w)/)[1])
   console.log(`Attempt started: Cup ${letters.join(', Cup ')}`)
 
-  // Every Cupping Step on the first cup, in order.
+  // Every Cupping Step on the first cup, in order. A preparing step is ticked once done; a Slurp adds Tasting Cues.
   const steps = panel.getByRole('group', { name: 'Cupping Steps' })
+  const cueLog = panel.getByRole('list').getByRole('listitem')
   for (const step of CUPPING_STEPS) {
+    const cueCountBefore = await cueLog.count()
     await steps.getByRole('button', { name: step, exact: true }).click()
-    const rejections = await panel.getByRole('alert').allInnerTexts()
-    assert.deepEqual(rejections, [], `${step} was rejected`)
+    const done = step === 'Slurp' ? cueLog.nth(cueCountBefore) : steps.getByRole('button', { name: `✓ ${step}`, exact: true })
+    await expectState(done, `${step} didn't complete on Cup ${letters[0]}`)
+    const rejectedStepMessages = await panel.getByRole('alert').allInnerTexts()
+    assert.deepEqual(rejectedStepMessages, [], `${step} was rejected`)
   }
-  const cues = await panel.getByRole('list').getByRole('listitem').count()
-  assert.ok(cues > 0, 'the Cue Log is empty after cupping')
-  console.log(`Cupped Cup ${letters[0]}: ${cues} Tasting Cues`)
+  console.log(`Cupped Cup ${letters[0]}: ${await cueLog.count()} Tasting Cues`)
   await screenshot(page, 'screenshots/play-1-cupped.png')
 
   // Rate every Attribute on every cup, checking Submit stays disabled until the last gap is filled.
-  assert.ok(await submit.isDisabled(), 'Submit is enabled before any Score Card is rated')
+  await expectState(submitWhen(true), 'Submit is enabled before any Score Card is rated')
   for (const [cupIndex, letter] of letters.entries()) {
-    await panel.getByRole('button', { name: new RegExp(`^Cup ${letter}\\b`) }).click()
+    await cupButton(letter).click()
     for (const [attributeIndex, attribute] of ATTRIBUTES.entries()) {
       if (cupIndex === letters.length - 1 && attributeIndex === ATTRIBUTES.length - 1) {
-        assert.ok(await submit.isDisabled(), `Submit is enabled with ${attribute} on Cup ${letter} unrated`)
+        await expectState(submitWhen(true), `Submit is enabled with ${attribute} on Cup ${letter} unrated`)
       }
       // A spread of ratings, so the Reveal shows a mix of Calibration Points.
-      const rating = ((cupIndex + attributeIndex) % 5) + 1
+      const rating = RATINGS[(cupIndex + attributeIndex) % RATINGS.length]
       await panel.getByRole('group', { name: attribute }).getByRole('button', { name: `${rating} cups` }).click()
     }
   }
-  assert.ok(await submit.isEnabled(), 'Submit is disabled with every Attribute rated')
+  await expectState(submitWhen(false), 'Submit is disabled with every Attribute rated')
   console.log('Every Score Card rated: Submit enabled')
   await screenshot(page, 'screenshots/play-2-rated.png')
 
   // Submit and the Reveal.
-  await submit.click()
+  await submitWhen(false).click()
   const reveal = page.getByRole('region', { name: 'Reveal' })
-  await reveal.waitFor()
+  await expectState(reveal, 'the Reveal did not appear after Submit')
   assert.equal(await reveal.getByRole('article').count(), letters.length, 'the Reveal does not show every cup')
   const stars = await reveal.getByLabel(/of 3 Stars$/).getAttribute('aria-label')
   console.log(`Reveal: ${stars}, ${await reveal.getByText(/Calibration Points$/).innerText()}`)
@@ -61,7 +74,7 @@ await withGamePage({}, async (page) => {
 
   // Cup again returns to the Lineup for a fresh Attempt.
   await reveal.getByRole('button', { name: 'Cup again' }).click()
-  await lineup.waitFor()
-  assert.equal(await reveal.count(), 0, 'the Reveal is still showing after Cup again')
+  await expectState(lineup, 'the Lineup did not appear after Cup again')
+  await expectState(reveal, 'the Reveal is still showing after Cup again', 'detached')
   console.log('Cup again: back at the Lineup')
 })
