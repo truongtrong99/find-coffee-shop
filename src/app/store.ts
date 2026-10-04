@@ -26,6 +26,8 @@ interface GameStore {
   lineupOptions: LineupOptions
   /** The NPC Cuppers picked for the next Attempt, in Seat order. */
   lineup: string[]
+  /** Why the core would reject the picked Lineup, or null if it fits the Seats. */
+  lineupRejection: string | null
   /** The Attempt in progress, the last snapshot of it once Submitted, or null while choosing a Lineup. */
   attempt: AttemptState | null
   /** The Reveal of the Submitted Attempt, or null while cupping. */
@@ -70,6 +72,7 @@ function tryCommand(command: () => void): string | null {
 export const useGameStore = create<GameStore>((set, get) => ({
   lineupOptions: core.getLineupOptions(firstSession.id),
   lineup: [],
+  lineupRejection: null,
   attempt: null,
   reveal: null,
   speed: 1,
@@ -78,7 +81,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rejection: null,
   toggleLineup(npcId) {
     const { lineup } = get()
-    set({ lineup: lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId], rejection: null })
+    const picked = lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId]
+    set({ lineup: picked, lineupRejection: core.checkLineup(firstSession.id, picked) ?? null, rejection: null })
   },
   startAttempt() {
     const rejection = tryCommand(() => core.startAttempt(firstSession.id, get().lineup))

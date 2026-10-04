@@ -14,6 +14,11 @@ export function isRating(value: number): value is Rating {
   return Number.isInteger(value) && value >= 1 && value <= 5
 }
 
+/** The nearest rating of 1–5 cups to a whole number of cups. */
+export function clampRating(cups: number): Rating {
+  return Math.min(5, Math.max(1, cups)) as Rating
+}
+
 /** The Attributes not yet rated on a Score Card, in Score Card order. */
 export function unratedAttributes(scoreCard: ScoreCard): Attribute[] {
   return ATTRIBUTES.filter((attribute) => scoreCard[attribute] === undefined)

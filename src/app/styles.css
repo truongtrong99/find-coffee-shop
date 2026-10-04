@@ -271,7 +271,7 @@ body,
   cursor: not-allowed;
 }
 
-.reveal-backdrop {
+.backdrop {
   position: fixed;
   inset: 0;
   display: flex;
@@ -389,8 +389,7 @@ body,
   color: #b9a08c;
 }
 
-.reveal .again,
-.lineup .again {
+.backdrop .primary {
   align-self: center;
   min-height: 44px;
   padding: 0 24px;
@@ -457,4 +456,12 @@ body,
   background: #fde2dc;
   color: #8a2a17;
   font-size: 14px;
+}
+
+.backdrop .primary:disabled {
+  border-style: dashed;
+  background: #fff;
+  color: #b9a08c;
+  border-color: #b9a08c;
+  cursor: not-allowed;
 }

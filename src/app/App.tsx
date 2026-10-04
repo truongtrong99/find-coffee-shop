@@ -57,10 +57,12 @@ function Hud() {
 function LineupScreen() {
   const { seats, npcCuppers } = useGameStore((s) => s.lineupOptions)
   const lineup = useGameStore((s) => s.lineup)
+  const lineupRejection = useGameStore((s) => s.lineupRejection)
   const rejection = useGameStore((s) => s.rejection)
   const { toggleLineup, startAttempt } = useGameStore.getState()
+  const problem = lineupRejection ?? rejection
   return (
-    <div className="reveal-backdrop">
+    <div className="backdrop">
       <section className="lineup" aria-label="Lineup">
         <h2>Who's cupping with you?</h2>
         <p>
@@ -77,12 +79,12 @@ function LineupScreen() {
             )
           })}
         </div>
-        {rejection && (
+        {problem && (
           <p className="rejection" role="alert">
-            {rejection}
+            {problem}
           </p>
         )}
-        <button className="again" onClick={startAttempt}>
+        <button className="primary" disabled={lineupRejection !== null} onClick={startAttempt}>
           Start cupping
         </button>
       </section>
@@ -246,7 +248,7 @@ function Reveal() {
   const cupAgain = useGameStore((s) => s.cupAgain)
   if (!reveal) return null
   return (
-    <div className="reveal-backdrop">
+    <div className="backdrop">
       <section className="reveal" aria-label="Reveal">
         <header>
           <h2>The Reveal</h2>
@@ -260,7 +262,7 @@ function Reveal() {
             <RevealCard key={cup.letter} cup={cup} />
           ))}
         </div>
-        <button className="again" onClick={cupAgain}>
+        <button className="primary" onClick={cupAgain}>
           Cup again
         </button>
       </section>

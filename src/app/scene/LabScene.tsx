@@ -107,12 +107,17 @@ interface SeatedNpc {
   latestStep: PerformedStep | undefined
 }
 
-/** The NPC Cuppers in their Seats: the Attempt's Lineup, or the one being chosen before it starts. */
+/**
+ * The NPC Cuppers in their Seats: the Attempt's Lineup, or a preview of the one being chosen
+ * before it starts, while it fits the Seats.
+ */
 function useSeatedNpcs(): SeatedNpc[] {
   const npcCuppers = useGameStore((s) => s.attempt?.npcCuppers)
   const lineup = useGameStore((s) => s.lineup)
+  const lineupFits = useGameStore((s) => s.lineupRejection === null)
   const options = useGameStore((s) => s.lineupOptions)
   if (npcCuppers) return npcCuppers.map(({ id, name, steps }) => ({ id, name, latestStep: steps.at(-1) }))
+  if (!lineupFits) return []
   return lineup.map((id) => ({ id, name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id, latestStep: undefined }))
 }
 

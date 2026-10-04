@@ -1,7 +1,7 @@
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
-import { isUnlocked, npcScoreCard, planSchedule, seatLineup } from './npcCuppers'
+import { isUnlocked, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
 import { ATTRIBUTE_NAMES, isRating, revealAttempt, unratedAttributes } from './scoring'
 import type {
@@ -34,6 +34,8 @@ export interface GameCore {
    * or more NPC Cuppers than Seats; Seats may be left empty.
    */
   startAttempt(sessionId: string, lineup: readonly string[]): void
+  /** Why `startAttempt` would reject this Lineup for this Cupping Session, or undefined if it fits. */
+  checkLineup(sessionId: string, lineup: readonly string[]): string | undefined
   /**
    * Advances the game clock by `seconds` of game time. The core has no notion of real
    * time: speed-up is the caller passing larger steps.
@@ -74,7 +76,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
     attempt = { ...attempt!, cups: attempt!.cups.map((c, i) => (i === index ? cup : c)) }
   }
 
-  function findSession(sessionId: string): { lab: LabContent; session: CuppingSessionContent } {
+  function findCuppingSession(sessionId: string): { lab: LabContent; session: CuppingSessionContent } {
     for (const lab of content.labs) {
       const session = lab.sessions.find((s) => s.id === sessionId)
       if (session) return { lab, session }
@@ -84,14 +86,14 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
 
   return {
     getLineupOptions(sessionId) {
-      const { lab } = findSession(sessionId)
+      const { lab } = findCuppingSession(sessionId)
       return {
         seats: lab.seats,
-        npcCuppers: content.npcCuppers.filter(isUnlocked).map(({ id, name }) => ({ id, name })),
+        npcCuppers: content.npcCuppers.filter(isUnlocked).map(summarize),
       }
     },
     startAttempt(sessionId, lineup) {
-      const { lab, session } = findSession(sessionId)
+      const { lab, session } = findCuppingSession(sessionId)
       const letters = session.cups.map((cup) => cup.letter)
       seated = seatLineup(content.npcCuppers, lab.seats, lineup).map((npc) => ({
         npc,
@@ -108,6 +110,16 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
           cues: [],
           scoreCard: {},
         })),
+      }
+    },
+    checkLineup(sessionId, lineup) {
+      const { lab } = findCuppingSession(sessionId)
+      try {
+        seatLineup(content.npcCuppers, lab.seats, lineup)
+        return undefined
+      } catch (error) {
+        if (!(error instanceof GameRuleError)) throw error
+        return error.message
       }
     },
     advanceClock(seconds) {
@@ -157,8 +169,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
           content: cup,
           scoreCard: attempt!.cups[i]!.scoreCard,
           npcScoreCards: seated.map(({ npc }) => ({
-            id: npc.id,
-            name: npc.name,
+            ...summarize(npc),
             scoreCard: npcScoreCard(npc, cup.referenceScore, content.tuning.npcScoreNoise, random),
           })),
         })),
@@ -178,8 +189,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
             scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
           })),
           npcCuppers: seated.map(({ npc, plannedSteps }) => ({
-            id: npc.id,
-            name: npc.name,
+            ...summarize(npc),
             steps: plannedSteps.filter((s) => s.atSeconds <= attempt!.elapsedSeconds).map((s) => ({ ...s })),
           })),
           canSubmit: attempt.cups.every((cup) => unratedAttributes(cup.scoreCard).length === 0),

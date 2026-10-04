@@ -86,6 +86,16 @@ describe('choosing a Lineup', () => {
     expect(game.getAttempt()).toBeUndefined()
   })
 
+  it('says why a Lineup would be rejected before the Attempt starts, or nothing when it fits', () => {
+    const game = newGame()
+
+    expect(game.checkLineup(SESSION, ['pip', 'mochi', 'juniper'])).toMatch(/3 NPC Cuppers.*2 Seats/)
+    expect(game.checkLineup(SESSION, ['biscuit'])).toMatch(/Biscuit.*locked/)
+    expect(game.checkLineup(SESSION, ['pip', 'mochi'])).toBeUndefined()
+    expect(game.checkLineup(SESSION, [])).toBeUndefined()
+    expect(game.getAttempt()).toBeUndefined()
+  })
+
   it('fills up to the Seat count in a Lab with more Seats', () => {
     const game = newGame()
 
@@ -676,24 +686,26 @@ describe('NPC Score Cards at the Reveal', () => {
   }
 
   // Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4, C 3/3/3/3/3 (Aroma/Flavor/Acidity/Body/Sweetness).
-  // Pip: Acidity +2, Sweetness -1. Juniper: Aroma -3, Flavor +1.
+  // Pip: Acidity +2, Sweetness -1. Juniper: Aroma -3, Flavor +1. Worked by hand, kept within 1–5.
+  const BIASED_CARDS = [
+    [
+      { id: 'pip', name: 'Pip', scoreCard: { aroma: 4, flavor: 3, acidity: 5, body: 2, sweetness: 2 } },
+      { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 4, body: 2, sweetness: 3 } },
+    ],
+    [
+      { id: 'pip', name: 'Pip', scoreCard: { aroma: 2, flavor: 5, acidity: 3, body: 5, sweetness: 3 } },
+      { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 5, acidity: 1, body: 5, sweetness: 4 } },
+    ],
+    [
+      { id: 'pip', name: 'Pip', scoreCard: { aroma: 3, flavor: 3, acidity: 5, body: 3, sweetness: 2 } },
+      { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 3, body: 3, sweetness: 3 } },
+    ],
+  ] as const
+
   it('shows every NPC Cupper\'s Score Card beside the Player\'s: the Reference Score shifted by their Personality Bias', () => {
     const reveal = revealWithLineup(['pip', 'juniper'])
 
-    expect(reveal.cups.map((cup) => cup.npcScoreCards)).toEqual([
-      [
-        { id: 'pip', name: 'Pip', scoreCard: { aroma: 4, flavor: 3, acidity: 5, body: 2, sweetness: 2 } },
-        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 4, body: 2, sweetness: 3 } },
-      ],
-      [
-        { id: 'pip', name: 'Pip', scoreCard: { aroma: 2, flavor: 5, acidity: 3, body: 5, sweetness: 3 } },
-        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 5, acidity: 1, body: 5, sweetness: 4 } },
-      ],
-      [
-        { id: 'pip', name: 'Pip', scoreCard: { aroma: 3, flavor: 3, acidity: 5, body: 3, sweetness: 2 } },
-        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 3, body: 3, sweetness: 3 } },
-      ],
-    ])
+    expect(reveal.cups.map((cup) => cup.npcScoreCards)).toEqual(BIASED_CARDS)
     expect(reveal.cups[0]!.scoreCard).toEqual(PLAYER_CARDS.A)
   })
 
@@ -704,8 +716,6 @@ describe('NPC Score Cards at the Reveal', () => {
   describe('with seeded noise', () => {
     const NOISE = { npcScoreNoise: 1 }
     const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1)
-    // Without noise: Pip and Juniper as above.
-    const NOISELESS = revealWithLineup(['pip', 'juniper'])
 
     it('scatters each rating by at most the noise around Reference Score plus bias, always within 1–5 cups', () => {
       for (const seed of SEEDS) {
@@ -715,7 +725,7 @@ describe('NPC Score Cards at the Reveal', () => {
             for (const attribute of ATTRIBUTES) {
               const rating = npcCard.scoreCard[attribute]
               expect([1, 2, 3, 4, 5]).toContain(rating)
-              expect(Math.abs(rating - NOISELESS.cups[c]!.npcScoreCards[n]!.scoreCard[attribute])).toBeLessThanOrEqual(1)
+              expect(Math.abs(rating - BIASED_CARDS[c]![n]!.scoreCard[attribute])).toBeLessThanOrEqual(1)
             }
           }),
         )

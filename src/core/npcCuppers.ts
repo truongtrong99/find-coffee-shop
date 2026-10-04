@@ -1,8 +1,17 @@
 import type { CoolingCurve } from './cooling'
 import { GameRuleError } from './errors'
 import type { RandomSource } from './ports'
-import { mapAttributes } from './scoring'
-import type { Attribute, CuppingStep, NpcCupperContent, NpcSchedule, PerformedStep, Rating, ReferenceScore } from './types'
+import { clampRating, mapAttributes } from './scoring'
+import type {
+  Attribute,
+  CuppingStep,
+  NpcCupperContent,
+  NpcCupperSummary,
+  NpcSchedule,
+  PerformedStep,
+  Rating,
+  ReferenceScore,
+} from './types'
 
 /** Each preparing step is done on every cup in turn before the next; Slurps come once every cup is skimmed. */
 const PREPARING_STEPS: readonly CuppingStep[] = ['dry-fragrance', 'pour', 'break-the-crust', 'skim']
@@ -28,6 +37,10 @@ export function planSchedule(schedule: NpcSchedule, cupLetters: readonly string[
     for (const letter of cupLetters) perform(letter, 'slurp', cooledAt)
   }
   return planned
+}
+
+export function summarize({ id, name }: NpcCupperContent): NpcCupperSummary {
+  return { id, name }
 }
 
 /** Until progression tracks Stars, only starter NPC Cuppers are unlocked. */
@@ -60,8 +73,7 @@ export function npcScoreCard(
   random: RandomSource,
 ): Record<Attribute, Rating> {
   return mapAttributes((attribute) => {
-    const chance = (random.next() * 2 - 1) * noise
-    const rating = Math.round(referenceScore[attribute] + (npc.personalityBias[attribute] ?? 0) + chance)
-    return Math.min(5, Math.max(1, rating)) as Rating
+    const noiseOffset = (random.next() * 2 - 1) * noise
+    return clampRating(Math.round(referenceScore[attribute] + (npc.personalityBias[attribute] ?? 0) + noiseOffset))
   })
 }

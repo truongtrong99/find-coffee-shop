@@ -132,9 +132,7 @@ export interface PerformedStep {
 }
 
 /** An NPC Cupper seated for an Attempt. */
-export interface NpcCupperState {
-  id: string
-  name: string
+export interface NpcCupperState extends NpcCupperSummary {
   /** Every Cupping Step they have performed so far, oldest first. */
   steps: PerformedStep[]
 }
@@ -154,9 +152,7 @@ export interface AttemptState {
 export type StarCount = 0 | 1 | 2 | 3
 
 /** An NPC Cupper's Score Card for one Blind Cup, shown at the Reveal. */
-export interface NpcScoreCard {
-  id: string
-  name: string
+export interface NpcScoreCard extends NpcCupperSummary {
   scoreCard: Record<Attribute, Rating>
 }
 
