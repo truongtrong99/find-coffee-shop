@@ -1,0 +1,68 @@
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: #f6e7cf;
+  font-family: ui-rounded, 'Nunito', system-ui, sans-serif;
+}
+
+.hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.9);
+  color: #4a3222;
+  box-shadow: 0 4px 12px rgba(74, 50, 34, 0.2);
+}
+
+.hud h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.hud .speed {
+  display: flex;
+  gap: 8px;
+}
+
+.hud button {
+  min-width: 48px;
+  min-height: 44px;
+  border: 2px solid #4a3222;
+  border-radius: 12px;
+  background: #fff;
+  color: #4a3222;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hud button[aria-pressed='true'] {
+  background: #4a3222;
+  color: #fff;
+}
+
+.cup-label {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #4a3222;
+  font-weight: 800;
+  font-size: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cup-label small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
