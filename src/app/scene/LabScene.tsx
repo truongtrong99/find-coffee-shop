@@ -3,6 +3,7 @@ import { useRef, type RefObject } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
 import { STEP_NAMES } from '../../core'
 import type { BlindCupState, PerformedStep } from '../../core'
+import { reactionTo } from '../cueDisplay'
 import { useGameStore } from '../store'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
@@ -155,10 +156,35 @@ function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivE
   })
 }
 
+/** The Player at the front of the table, leaning in over the cup in first-person and reacting to their latest cues. */
+function PlayerCupper({ cups, labelLayer }: { cups: BlindCupState[]; labelLayer: RefObject<HTMLDivElement | null> }) {
+  const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
+  const freshCues = useGameStore((s) => s.freshCues)
+  const cupIndex = cups.findIndex((cup) => cup.letter === firstPersonLetter)
+  const reaction = freshCues && reactionTo(freshCues.cues)
+  return (
+    <Cupper
+      position={PLAYER_POSITION}
+      facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
+      leaning={cupIndex !== -1}
+      labelLayer={labelLayer}
+      label={
+        reaction &&
+        firstPersonLetter === null && (
+          <div className="cupper-label">
+            {reaction.emoji} {reaction.text}
+          </div>
+        )
+      }
+    />
+  )
+}
+
 export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement | null> }) {
   const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
   const selectedLetter = useGameStore((s) => s.selectedLetter)
   const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
+  const freshCues = useGameStore((s) => s.freshCues)
   const selectCup = useGameStore((s) => s.selectCup)
   const firstPersonIndex = cups.findIndex((cup) => cup.letter === firstPersonLetter)
   return (
@@ -185,11 +211,13 @@ export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement 
           position={[cupX(i, cups.length), CUP_TABLE_HEIGHT, 0]}
           selected={cup.letter === selectedLetter}
           showLabel={firstPersonLetter === null}
+          freshCues={freshCues?.letter === cup.letter ? freshCues : undefined}
+          showFlavorIcons={firstPersonLetter === cup.letter}
           onSelect={() => selectCup(cup.letter)}
           labelLayer={labelLayer}
         />
       ))}
-      <Cupper position={PLAYER_POSITION} facing={TABLE_CENTRE} />
+      <PlayerCupper cups={cups} labelLayer={labelLayer} />
       <NpcCuppers labelLayer={labelLayer} showLabels={firstPersonLetter === null} />
     </>
   )

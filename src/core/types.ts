@@ -14,6 +14,23 @@ export const ATTRIBUTES = ['aroma', 'flavor', 'acidity', 'body', 'sweetness'] as
 /** One quality a coffee is scored on. */
 export type Attribute = (typeof ATTRIBUTES)[number]
 
+/** A Cup Temperature range in degrees Celsius, both ends included. */
+export interface AccuracyWindow {
+  min: number
+  max: number
+}
+
+/** Tunable Tasting Cue constants. Stone cold is `CoolingTuning.stoneColdTemperature`. */
+export interface TastingTuning {
+  /** Per Attribute, the Cup Temperatures at which a cue about it is accurate. */
+  accuracyWindows: Record<Attribute, AccuracyWindow>
+  /** Chance, 0–1, that a cue outside its Accuracy Window is skewed one cup off rather than vague. */
+  skewedCueChance: number
+}
+
+/** Where a Cup Temperature sits against an Attribute's Accuracy Window; stone cold overrides the window. */
+export type WindowPosition = 'too-hot' | 'inside' | 'too-cold' | 'stone-cold'
+
 /** An Attribute rating, 1–5 cups. */
 export type Rating = 1 | 2 | 3 | 4 | 5
 
@@ -44,6 +61,15 @@ export interface TastingCue {
   step: CuppingStep
   attribute: Attribute
   note: string
+  /** The Cup Temperature when the cue was given. */
+  temperature: number
+  /** Where that Cup Temperature sat against the Attribute's Accuracy Window. */
+  window: WindowPosition
+  /**
+   * The rating the cue tastes of, for the presentation's particles, icons and reactions: the Reference
+   * Score inside the Accuracy Window, possibly a wrong one outside it. Undefined when the cue is vague.
+   */
+  suggestedRating: Rating | undefined
 }
 
 export interface CuppingSessionContent {
@@ -86,9 +112,12 @@ export interface NpcCupperContent {
 export interface GameContent {
   tuning: {
     cooling: CoolingTuning
+    tasting: TastingTuning
     /** Most an NPC Cupper's rating strays from Reference Score plus Personality Bias by chance, before rounding. */
     npcScoreNoise: number
   }
+  /** The note a vague cue gives about each Attribute, whatever the coffee. */
+  vagueTastingNotes: Record<Attribute, string>
   npcCuppers: NpcCupperContent[]
   labs: LabContent[]
 }
@@ -115,6 +144,8 @@ export interface BlindCupState {
   completedSteps: CuppingStep[]
   /** The Cue Log: every Tasting Cue received about this cup, oldest first. */
   cues: TastingCue[]
+  /** Where the current Cup Temperature sits against each Attribute's Accuracy Window. */
+  windows: Record<Attribute, WindowPosition>
   /** The Player's Score Card for this cup, editable until Submit. */
   scoreCard: ScoreCard
   /** Whether every Attribute on this cup's Score Card is rated. */

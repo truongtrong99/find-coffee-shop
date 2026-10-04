@@ -1,9 +1,10 @@
+import { assertValidTastingTuning, windowPosition } from './accuracyWindows'
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
 import { isUnlocked, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
-import { ATTRIBUTE_NAMES, isRating, revealAttempt, unratedAttributes } from './scoring'
+import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
 import type {
   AttemptState,
   Attribute,
@@ -17,6 +18,7 @@ import type {
   NpcCupperContent,
   PerformedStep,
   RevealResult,
+  WindowPosition,
 } from './types'
 
 export interface GameCoreDeps {
@@ -55,16 +57,23 @@ export interface GameCore {
 }
 
 /** What the core tracks for a Blind Cup; snapshots add what is derived from it. */
-type CupProgress = Omit<BlindCupState, 'scoreCardComplete'>
+type CupProgress = Omit<BlindCupState, 'scoreCardComplete' | 'windows'>
 type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit'> & { cups: CupProgress[] }
 
 export function createGameCore({ content, random }: GameCoreDeps): GameCore {
   const cooling = createCoolingCurve(content.tuning.cooling)
+  assertValidTastingTuning(content.tuning.tasting)
   const { temperatureAt } = cooling
+  const { accuracyWindows } = content.tuning.tasting
+  const { stoneColdTemperature } = content.tuning.cooling
   let attempt: AttemptProgress | undefined
   let cupContents: BlindCupContent[] = []
   /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
   let seated: { npc: NpcCupperContent; plannedSteps: PerformedStep[] }[] = []
+
+  function windowsAt(temperature: number): Record<Attribute, WindowPosition> {
+    return mapAttributes((attribute) => windowPosition(temperature, accuracyWindows[attribute], stoneColdTemperature))
+  }
 
   function cupIndex(cupLetter: string): number {
     const index = cupContents.findIndex((cup) => cup.letter === cupLetter)
@@ -142,7 +151,13 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
       replaceCup(index, {
         ...cup,
         completedSteps: [...cup.completedSteps, step],
-        cues: [...cup.cues, ...cuesForStep(cupContents[index]!, step)],
+        cues: [...cup.cues, ...cuesForStep(cupContents[index]!, step, {
+          temperature: cup.temperature,
+          windows: windowsAt(cup.temperature),
+          vagueTastingNotes: content.vagueTastingNotes,
+          skewedCueChance: content.tuning.tasting.skewedCueChance,
+          random,
+        })],
       })
     },
     setRating(cupLetter, attribute, rating) {
@@ -185,6 +200,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
             ...cup,
             completedSteps: [...cup.completedSteps],
             cues: cup.cues.map((cue) => ({ ...cue })),
+            windows: windowsAt(cup.temperature),
             scoreCard: { ...cup.scoreCard },
             scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
           })),

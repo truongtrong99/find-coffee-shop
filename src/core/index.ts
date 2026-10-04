@@ -7,6 +7,7 @@ export { ATTRIBUTE_NAMES } from './scoring'
 export type { RandomSource, SaveStore } from './ports'
 export { ATTRIBUTES } from './types'
 export type {
+  AccuracyWindow,
   AttemptState,
   Attribute,
   BlindCupContent,
@@ -31,5 +32,7 @@ export type {
   StarCount,
   TastingCue,
   TastingNotes,
+  TastingTuning,
   UnlockRule,
+  WindowPosition,
 } from './types'

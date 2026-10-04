@@ -11,11 +11,18 @@ const tastingNotes: TastingNotes = {
 
 export interface TestTuningOverrides {
   cooling?: Partial<GameContent['tuning']['cooling']>
+  accuracyWindows?: Partial<GameContent['tuning']['tasting']['accuracyWindows']>
+  skewedCueChance?: number
   npcScoreNoise?: number
 }
 
 /** Small fixture content for facade tests; independent of the shipped v1 content. */
-export function makeTestContent({ cooling = {}, npcScoreNoise = 0 }: TestTuningOverrides = {}): GameContent {
+export function makeTestContent({
+  cooling = {},
+  accuracyWindows = {},
+  skewedCueChance = 0.5,
+  npcScoreNoise = 0,
+}: TestTuningOverrides = {}): GameContent {
   return {
     tuning: {
       cooling: {
@@ -25,7 +32,26 @@ export function makeTestContent({ cooling = {}, npcScoreNoise = 0 }: TestTuningO
         secondsToStoneCold: 240,
         ...cooling,
       },
+      tasting: {
+        // Aroma hot, Body warm, Flavor across a broad middle, Acidity and Sweetness while cooling.
+        accuracyWindows: {
+          aroma: { min: 70, max: 90 },
+          body: { min: 55, max: 75 },
+          flavor: { min: 40, max: 80 },
+          acidity: { min: 35, max: 55 },
+          sweetness: { min: 35, max: 60 },
+          ...accuracyWindows,
+        },
+        skewedCueChance,
+      },
       npcScoreNoise,
+    },
+    vagueTastingNotes: {
+      aroma: 'aroma ?: hard to make out',
+      flavor: 'flavor ?: hard to make out',
+      acidity: 'acidity ?: hard to make out',
+      body: 'body ?: hard to make out',
+      sweetness: 'sweetness ?: hard to make out',
     },
     npcCuppers: [
       {

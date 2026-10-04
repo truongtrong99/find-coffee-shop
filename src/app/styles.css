@@ -225,6 +225,161 @@ body,
   color: #a0785a;
 }
 
+.cue-log .cue-meta em {
+  font-style: normal;
+  color: #b4472b;
+}
+
+.cue-log li:not(.inside) {
+  background: #f8efe4;
+}
+
+.thermometer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.window-row {
+  display: grid;
+  grid-template-columns: 104px 1fr 64px;
+  white-space: nowrap;
+  align-items: center;
+  gap: 6px;
+  color: #8a6a52;
+}
+
+.window-row.inside {
+  color: #4a3222;
+  font-weight: 700;
+}
+
+.window-track {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(to right, #4aa3e0, #e8452c);
+  opacity: 0.35;
+}
+
+.window-row.inside .window-track {
+  opacity: 1;
+}
+
+.stone-cold-zone {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 6px 0 0 6px;
+  background: repeating-linear-gradient(45deg, #9fb7c9 0 3px, #dfe9f0 3px 6px);
+}
+
+.window-range {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  border: 2px solid #4a3222;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+}
+
+.temperature-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #4a3222;
+}
+
+.window-state {
+  font-size: 11px;
+  text-align: right;
+}
+
+.thermometer-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 110px;
+  margin-right: 70px;
+  font-size: 10px;
+  color: #a0785a;
+}
+
+.thermometer-legend {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #8a6a52;
+}
+
+.legend-window,
+.legend-stone-cold {
+  display: inline-block;
+  width: 14px;
+  height: 8px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.legend-window {
+  border: 2px solid #4a3222;
+  box-sizing: border-box;
+}
+
+.legend-stone-cold {
+  background: repeating-linear-gradient(45deg, #9fb7c9 0 3px, #dfe9f0 3px 6px);
+}
+
+.fresh-cues {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fresh-cues .reaction {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #4a3222;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.flavor-icons {
+  display: flex;
+  gap: 6px;
+}
+
+.flavor-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 250, 240, 0.9);
+  font-size: calc(10px + var(--intensity) * 4px);
+  animation: pop 0.4s ease-out both;
+}
+
+.flavor-icon.vague {
+  font-size: 18px;
+  font-weight: 800;
+  color: #8a6a52;
+  opacity: 0.7;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
 .score-card {
   display: flex;
   flex-direction: column;

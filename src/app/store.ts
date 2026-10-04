@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { content, firstSession } from '../content/v1'
 import { createGameCore, GameRuleError } from '../core'
-import type { AttemptState, Attribute, CuppingStep, LineupOptions, RevealResult } from '../core'
+import type { AttemptState, Attribute, CuppingStep, LineupOptions, RevealResult, TastingCue } from '../core'
 import { createLocalStorageSaveStore } from './localStorageSaveStore'
 
 export const SPEEDS = [1, 2, 4, 8] as const
@@ -14,6 +14,9 @@ const MAX_REAL_STEP_SECONDS = 0.1
 // How long the camera lingers in first-person after a Cupping Step before returning to the diorama.
 // Presentation only: it never affects the game clock.
 const FIRST_PERSON_REAL_SECONDS = 2.5
+
+// How long the Player's latest Tasting Cues show as particles, flavor icons and a reaction. Presentation only.
+const FRESH_CUES_REAL_SECONDS = 4
 
 const core = createGameCore({
   content,
@@ -39,6 +42,8 @@ interface GameStore {
   firstPersonLetter: string | null
   /** Why the core rejected the Player's last command, if it did. */
   rejection: string | null
+  /** The Tasting Cues the Player's latest Cupping Step gave, while its effects show; `id` restarts them. */
+  freshCues: { id: number; letter: string; cues: TastingCue[] } | null
   /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
   toggleLineup(npcId: string): void
   /** Starts an Attempt with the chosen Lineup. */
@@ -57,6 +62,8 @@ interface GameStore {
 }
 
 let returnTimer: ReturnType<typeof setTimeout> | undefined
+let freshCuesTimer: ReturnType<typeof setTimeout> | undefined
+let freshCuesId = 0
 
 /** Runs a core command, returning the core's reason if it rejected it. */
 function tryCommand(command: () => void): string | null {
@@ -79,6 +86,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedLetter: firstSession.cups[0]!.letter,
   firstPersonLetter: null,
   rejection: null,
+  freshCues: null,
   toggleLineup(npcId) {
     const { lineup } = get()
     const picked = lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId]
@@ -100,7 +108,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (rejection) return set({ rejection })
     clearTimeout(returnTimer)
     returnTimer = setTimeout(() => get().returnToDiorama(), FIRST_PERSON_REAL_SECONDS * 1000)
-    set({ attempt: core.getAttempt()!, firstPersonLetter: letter, rejection: null })
+    const attempt = core.getAttempt()!
+    const cueCountBefore = get().attempt!.cups.find((cup) => cup.letter === letter)!.cues.length
+    const cues = attempt.cups.find((cup) => cup.letter === letter)!.cues.slice(cueCountBefore)
+    clearTimeout(freshCuesTimer)
+    if (cues.length > 0) freshCuesTimer = setTimeout(() => set({ freshCues: null }), FRESH_CUES_REAL_SECONDS * 1000)
+    set({
+      attempt,
+      firstPersonLetter: letter,
+      rejection: null,
+      freshCues: cues.length > 0 ? { id: ++freshCuesId, letter, cues } : null,
+    })
   },
   setRating(attribute, rating) {
     const rejection = tryCommand(() => core.setRating(get().selectedLetter, attribute, rating))
@@ -113,7 +131,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     })
     if (rejection) return set({ rejection })
     clearTimeout(returnTimer)
-    set({ reveal, firstPersonLetter: null, rejection: null })
+    clearTimeout(freshCuesTimer)
+    set({ reveal, firstPersonLetter: null, rejection: null, freshCues: null })
   },
   cupAgain() {
     set({ lineupOptions: core.getLineupOptions(firstSession.id), attempt: null, reveal: null, rejection: null })

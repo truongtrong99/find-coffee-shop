@@ -49,9 +49,30 @@ export const content: GameContent = {
       // Hot to cold in 4 game minutes at normal speed.
       secondsToStoneCold: 240,
     },
+    tasting: {
+      // Aroma is best judged hot, Body warm, Acidity and Sweetness while cooling, Flavor across a broad middle.
+      // Aroma is readable from the start, Sweetness and Acidity from about 70–80 game seconds, and
+      // nothing once stone cold at 4 minutes.
+      accuracyWindows: {
+        aroma: { min: 68, max: 85 },
+        body: { min: 55, max: 70 },
+        flavor: { min: 42, max: 75 },
+        acidity: { min: 35, max: 55 },
+        sweetness: { min: 36, max: 58 },
+      },
+      // Outside its window, a cue is as likely to mislead (one cup off) as to be vague.
+      skewedCueChance: 0.5,
+    },
     // NPC ratings stray up to ¾ of a cup from Reference Score plus Personality Bias, so roughly
     // half of them land one cup off.
     npcScoreNoise: 0.75,
+  },
+  vagueTastingNotes: {
+    aroma: 'too muddled to tell how fragrant it is',
+    flavor: 'hard to pick out any flavor',
+    acidity: "can't tell how bright it is",
+    body: 'hard to judge the body',
+    sweetness: "can't tell how sweet it is",
   },
   npcCuppers: [
     {

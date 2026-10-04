@@ -362,7 +362,7 @@ describe('Cupping Steps and Tasting Cues', () => {
     game.performStep('A', 'dry-fragrance')
 
     expect(cup(game, 'A').completedSteps).toEqual(['dry-fragrance'])
-    expect(cup(game, 'A').cues).toEqual([{ step: 'dry-fragrance', attribute: 'aroma', note: 'aroma 4: floral' }])
+    expect(cup(game, 'A').cues).toMatchObject([{ step: 'dry-fragrance', attribute: 'aroma', note: 'aroma 4: floral' }])
   })
 
   it('rejects a step out of order with a reason naming the next valid step, leaving the cup unchanged', () => {
@@ -399,7 +399,7 @@ describe('Cupping Steps and Tasting Cues', () => {
     game.performStep('A', 'skim')
 
     expect(cup(game, 'A').completedSteps).toEqual(['dry-fragrance', 'pour', 'break-the-crust', 'skim'])
-    expect(cup(game, 'A').cues).toEqual([
+    expect(cup(game, 'A').cues).toMatchObject([
       { step: 'dry-fragrance', attribute: 'aroma', note: 'aroma 4: floral' },
       { step: 'break-the-crust', attribute: 'aroma', note: 'aroma 4: floral' },
     ])
@@ -418,19 +418,20 @@ describe('Cupping Steps and Tasting Cues', () => {
     for (const step of ['pour', 'break-the-crust', 'skim'] as const) game.performStep(letter, step)
   }
 
-  it('a Slurp after Skim gives a cue for every Attribute, noted from the Reference Score', () => {
+  // Whether each cue is accurate depends on Cup Temperature: see 'Accuracy Windows for Tasting Cues'.
+  it('a Slurp after Skim gives a cue for every Attribute, in Score Card order', () => {
     const game = startedGame()
     skimmed(game, 'B')
 
     game.performStep('B', 'slurp')
 
-    expect(cup(game, 'B').cues).toEqual([
+    expect(cup(game, 'B').cues).toMatchObject([
       { step: 'break-the-crust', attribute: 'aroma', note: 'aroma 2: faint' },
       { step: 'slurp', attribute: 'aroma', note: 'aroma 2: faint' },
-      { step: 'slurp', attribute: 'flavor', note: 'flavor 5: layered berries' },
-      { step: 'slurp', attribute: 'acidity', note: 'acidity 1: flat' },
-      { step: 'slurp', attribute: 'body', note: 'body 5: syrupy' },
-      { step: 'slurp', attribute: 'sweetness', note: 'sweetness 4: honeyed' },
+      { step: 'slurp', attribute: 'flavor' },
+      { step: 'slurp', attribute: 'acidity' },
+      { step: 'slurp', attribute: 'body' },
+      { step: 'slurp', attribute: 'sweetness' },
     ])
   })
 
@@ -444,10 +445,10 @@ describe('Cupping Steps and Tasting Cues', () => {
 
     expect(cup(game, 'C').completedSteps).toEqual(['pour', 'break-the-crust', 'skim', 'slurp', 'slurp', 'slurp'])
     expect(cup(game, 'C').cues.filter((c) => c.step === 'slurp')).toHaveLength(15)
-    expect(cup(game, 'C').cues.filter((c) => c.attribute === 'acidity').map((c) => c.note)).toEqual([
-      'acidity 3: apple',
-      'acidity 3: apple',
-      'acidity 3: apple',
+    expect(cup(game, 'C').cues.filter((c) => c.step === 'slurp' && c.attribute === 'aroma').map((c) => c.note)).toEqual([
+      'aroma 3: nutty',
+      'aroma 3: nutty',
+      'aroma 3: nutty',
     ])
   })
 
@@ -463,7 +464,7 @@ describe('Cupping Steps and Tasting Cues', () => {
 
     game.performStep('B', 'dry-fragrance')
 
-    expect(cup(game, 'B').cues).toEqual([{ step: 'dry-fragrance', attribute: 'aroma', note: 'aroma 2: faint' }])
+    expect(cup(game, 'B').cues).toMatchObject([{ step: 'dry-fragrance', attribute: 'aroma', note: 'aroma 2: faint' }])
     expect(cup(game, 'A').cues).toHaveLength(7)
   })
 
@@ -476,6 +477,165 @@ describe('Cupping Steps and Tasting Cues', () => {
 
   it('rejects a Cupping Step when no Attempt is in progress', () => {
     expect(() => newGame().performStep('A', 'dry-fragrance')).toThrow(/no Attempt/i)
+  })
+})
+
+describe('Accuracy Windows for Tasting Cues', () => {
+  // Test windows: Aroma 70–90°C, Body 55–75, Flavor 40–80, Acidity 35–55, Sweetness 35–60; stone cold at 30.
+  // The cups cool 90 -> 30 in 240s towards 20, so they are 90°C at 0s, 46.46°C at 120s and 26.15°C at 300s.
+  // Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4 (Aroma/Flavor/Acidity/Body/Sweetness).
+
+  /** A game with every cup skimmed, the clock advanced to `seconds`, ready to Slurp. */
+  function readyToSlurp(seconds: number, tuning: TestTuningOverrides = {}, seed = 1) {
+    const game = newGame(tuning, seed)
+    game.startAttempt(SESSION, [])
+    for (const letter of ['A', 'B', 'C']) {
+      for (const step of ['pour', 'break-the-crust', 'skim'] as const) game.performStep(letter, step)
+    }
+    game.advanceClock(seconds)
+    return game
+  }
+
+  /** The cues of the cup's latest Cupping Step, by Attribute. */
+  function latestCues(game: ReturnType<typeof newGame>, letter: string) {
+    const cues = game.getAttempt()!.cups.find((c) => c.letter === letter)!.cues
+    return Object.fromEntries(cues.slice(-ATTRIBUTES.length).map((cue) => [cue.attribute, cue]))
+  }
+
+  it('a Slurp inside an Attribute\'s Accuracy Window gives a cue noted from the Reference Score', () => {
+    const game = readyToSlurp(120)
+
+    game.performStep('A', 'slurp')
+
+    const cues = latestCues(game, 'A')
+    expect(cues.flavor).toEqual({
+      step: 'slurp',
+      attribute: 'flavor',
+      note: 'flavor 3: cocoa',
+      temperature: expect.closeTo(46.4575, 3),
+      window: 'inside',
+      suggestedRating: 3,
+    })
+    expect(cues.acidity).toMatchObject({ note: 'acidity 4: bright, lemony', window: 'inside', suggestedRating: 4 })
+    expect(cues.sweetness).toMatchObject({ note: 'sweetness 3: caramel', window: 'inside', suggestedRating: 3 })
+  })
+
+  it('a Slurp outside an Attribute\'s window can give a vague cue, saying whether the cup was too hot or too cold', () => {
+    const hot = readyToSlurp(0, { skewedCueChance: 0 })
+    const cooling = readyToSlurp(120, { skewedCueChance: 0 })
+
+    hot.performStep('A', 'slurp')
+    cooling.performStep('A', 'slurp')
+
+    expect(latestCues(hot, 'A').acidity).toEqual({
+      step: 'slurp',
+      attribute: 'acidity',
+      note: 'acidity ?: hard to make out',
+      temperature: 90,
+      window: 'too-hot',
+      suggestedRating: undefined,
+    })
+    expect(latestCues(hot, 'A').aroma).toMatchObject({ note: 'aroma 4: floral', window: 'inside' })
+    expect(latestCues(cooling, 'A').aroma).toMatchObject({ note: 'aroma ?: hard to make out', window: 'too-cold', suggestedRating: undefined })
+    expect(latestCues(cooling, 'A').body).toMatchObject({ note: 'body ?: hard to make out', window: 'too-cold', suggestedRating: undefined })
+  })
+
+  it('a Slurp outside an Attribute\'s window can give a cue skewed one cup off the Reference Score', () => {
+    const game = readyToSlurp(0, { skewedCueChance: 1 })
+
+    game.performStep('A', 'slurp')
+    game.performStep('B', 'slurp')
+
+    // Cup B's Acidity 1 and Body 5 can only be skewed one way.
+    expect(latestCues(game, 'B').acidity).toMatchObject({ note: 'acidity 2: soft', window: 'too-hot', suggestedRating: 2 })
+    expect(latestCues(game, 'B').body).toMatchObject({ note: 'body 4: creamy', window: 'too-hot', suggestedRating: 4 })
+    // Cup A's Acidity 4 and Flavor 3 can be skewed either way.
+    expect(['acidity 3: apple', 'acidity 5: sparkling']).toContain(latestCues(game, 'A').acidity!.note)
+    expect([3, 5]).toContain(latestCues(game, 'A').acidity!.suggestedRating)
+    expect(['flavor 2: muted', 'flavor 4: stone fruit']).toContain(latestCues(game, 'A').flavor!.note)
+    // Aroma is inside its window at 90°C, so stays accurate.
+    expect(latestCues(game, 'A').aroma).toMatchObject({ note: 'aroma 4: floral', window: 'inside', suggestedRating: 4 })
+  })
+
+  describe('with the seeded random source deciding vague or skewed', () => {
+    const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1)
+
+    /** Cup A's Acidity cue from a Slurp at 90°C, too hot for its window; Reference Score 4. */
+    function hotAcidityCue(seed: number) {
+      const game = readyToSlurp(0, { skewedCueChance: 0.5 }, seed)
+      game.performStep('A', 'slurp')
+      return latestCues(game, 'A').acidity!
+    }
+
+    it('is never accurate outside the window: always vague, or one cup off', () => {
+      for (const seed of SEEDS) {
+        expect([undefined, 3, 5]).toContain(hotAcidityCue(seed).suggestedRating)
+      }
+    })
+
+    it('gives both vague and skewed cues across seeds, but repeats for the same seed', () => {
+      const ratings = SEEDS.map((seed) => hotAcidityCue(seed).suggestedRating)
+
+      expect(new Set(ratings)).toEqual(new Set([undefined, 3, 5]))
+      expect(hotAcidityCue(7)).toEqual(hotAcidityCue(7))
+    })
+  })
+
+  it('Dry Fragrance and Break the Crust follow the Aroma window too', () => {
+    const game = newGame({ skewedCueChance: 0 })
+    game.startAttempt(SESSION, [])
+    game.performStep('A', 'pour')
+    game.advanceClock(120)
+
+    game.performStep('B', 'dry-fragrance')
+    game.performStep('A', 'break-the-crust')
+
+    const aromaCue = (letter: string) => game.getAttempt()!.cups.find((c) => c.letter === letter)!.cues.at(-1)
+    expect(aromaCue('B')).toMatchObject({ step: 'dry-fragrance', note: 'aroma ?: hard to make out', window: 'too-cold' })
+    expect(aromaCue('A')).toMatchObject({ step: 'break-the-crust', note: 'aroma ?: hard to make out', window: 'too-cold' })
+  })
+
+  it('shows where each cup\'s current temperature sits against every Attribute\'s window, so Slurps can be timed', () => {
+    const game = readyToSlurp(0)
+    const windows = () => game.getAttempt()!.cups.map((cup) => cup.windows)
+
+    expect(windows()[0]).toEqual({ aroma: 'inside', flavor: 'too-hot', acidity: 'too-hot', body: 'too-hot', sweetness: 'too-hot' })
+
+    game.advanceClock(70) // 59.7°C: just inside Sweetness's window
+    expect(windows()[0]).toEqual({ aroma: 'too-cold', flavor: 'inside', acidity: 'too-hot', body: 'inside', sweetness: 'inside' })
+
+    game.advanceClock(50) // 46.46°C
+    expect(windows()[0]).toEqual({ aroma: 'too-cold', flavor: 'inside', acidity: 'inside', body: 'too-cold', sweetness: 'inside' })
+
+    game.advanceClock(180) // 26.15°C
+    expect(new Set(Object.values(windows()[0]!))).toEqual(new Set(['stone-cold']))
+    expect(new Set(windows().map((w) => JSON.stringify(w))).size).toBe(1)
+  })
+
+  it('rejects an Accuracy Window whose coolest temperature is above its hottest', () => {
+    expect(() => newGame({ accuracyWindows: { body: { min: 75, max: 55 } } })).toThrow(GameRuleError)
+    expect(() => newGame({ accuracyWindows: { body: { min: 75, max: 55 } } })).toThrow(/Accuracy Window.*Body/)
+  })
+
+  it.each([-0.1, 1.5, Number.NaN])('rejects a skewed cue chance of %s, outside 0–1', (skewedCueChance) => {
+    expect(() => newGame({ skewedCueChance })).toThrow(/skewed cue chance/i)
+  })
+
+  it('a stone-cold cup gives vague cues for every Attribute, even where a window reaches below stone cold', () => {
+    const game = readyToSlurp(300, { skewedCueChance: 1, accuracyWindows: { acidity: { min: 20, max: 55 } } })
+
+    game.performStep('B', 'slurp')
+
+    expect(Object.values(latestCues(game, 'B'))).toEqual(
+      ATTRIBUTES.map((attribute) => ({
+        step: 'slurp',
+        attribute,
+        note: `${attribute} ?: hard to make out`,
+        temperature: expect.closeTo(26.15, 2),
+        window: 'stone-cold',
+        suggestedRating: undefined,
+      })),
+    )
   })
 })
 

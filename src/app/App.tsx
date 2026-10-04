@@ -1,8 +1,9 @@
 import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { firstSession } from '../content/v1'
+import { content, firstSession } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { AttemptState, CuppingStep, RevealedCup, StarCount } from '../core'
+import type { AttemptState, BlindCupState, CuppingStep, RevealedCup, StarCount } from '../core'
+import { ATTRIBUTE_ICONS, WINDOW_LABELS } from './cueDisplay'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
 
@@ -16,6 +17,15 @@ const STEPS: { step: CuppingStep; label: string }[] = [
 const STEP_LABELS = Object.fromEntries(STEPS.map(({ step, label }) => [step, label])) as Record<CuppingStep, string>
 
 const RATINGS = [1, 2, 3, 4, 5] as const
+
+const { ambientTemperature, startTemperature, stoneColdTemperature } = content.tuning.cooling
+const { accuracyWindows } = content.tuning.tasting
+
+/** Where a Cup Temperature falls along the thermometer, as a percentage from room temperature to the starting heat. */
+function thermometerPercent(temperature: number) {
+  const percent = ((temperature - ambientTemperature) / (startTemperature - ambientTemperature)) * 100
+  return Math.min(100, Math.max(0, percent))
+}
 
 function useGameLoop() {
   const tick = useGameStore((s) => s.tick)
@@ -92,6 +102,42 @@ function LineupScreen() {
   )
 }
 
+/** Each Attribute's Accuracy Window on one scale, with the cup's current temperature, so the Player can time Slurps. */
+function Thermometer({ cup }: { cup: BlindCupState }) {
+  return (
+    <div className="thermometer">
+      {ATTRIBUTES.map((attribute) => {
+        const { min, max } = accuracyWindows[attribute]
+        const position = cup.windows[attribute]
+        return (
+          <div key={attribute} className={`window-row ${position}`}>
+            <span className="window-name">
+              {ATTRIBUTE_ICONS[attribute]} {ATTRIBUTE_NAMES[attribute]}
+            </span>
+            <span className="window-track" aria-hidden="true">
+              <span className="stone-cold-zone" style={{ width: `${thermometerPercent(stoneColdTemperature)}%` }} />
+              <span
+                className="window-range"
+                style={{ left: `${thermometerPercent(min)}%`, width: `${thermometerPercent(max) - thermometerPercent(min)}%` }}
+              />
+              <span className="temperature-marker" style={{ left: `${thermometerPercent(cup.temperature)}%` }} />
+            </span>
+            <span className="window-state">{WINDOW_LABELS[position]}</span>
+          </div>
+        )
+      })}
+      <div className="thermometer-scale" aria-hidden="true">
+        <span>{ambientTemperature}°C</span>
+        <span>{startTemperature}°C</span>
+      </div>
+      <p className="thermometer-legend">
+        <span className="legend-window" /> Accuracy Window · <span className="legend-stone-cold" /> stone cold at{' '}
+        {stoneColdTemperature}°C
+      </p>
+    </div>
+  )
+}
+
 function CuppingPanel() {
   const attempt = useGameStore((s) => s.attempt)
   return attempt && <AttemptPanel attempt={attempt} />
@@ -144,15 +190,19 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
         </button>
       )}
 
+      <h3>Thermometer</h3>
+      <Thermometer cup={cup} />
+
       <h3>Cue Log</h3>
       {cup.cues.length === 0 ? (
         <p className="empty">No Tasting Cues yet. Start with Dry Fragrance or Pour.</p>
       ) : (
         <ol className="cue-log">
           {cup.cues.map((cue, i) => (
-            <li key={i} ref={i === cup.cues.length - 1 ? logEnd : undefined}>
+            <li key={i} ref={i === cup.cues.length - 1 ? logEnd : undefined} className={cue.window}>
               <span className="cue-meta">
-                {STEP_LABELS[cue.step]} · {ATTRIBUTE_NAMES[cue.attribute]}
+                {ATTRIBUTE_ICONS[cue.attribute]} {STEP_LABELS[cue.step]} · {ATTRIBUTE_NAMES[cue.attribute]} ·{' '}
+                {Math.round(cue.temperature)}°C{cue.window !== 'inside' && <em> · {WINDOW_LABELS[cue.window]}</em>}
               </span>
               {cue.note}
             </li>
