@@ -350,12 +350,12 @@ body,
   white-space: nowrap;
 }
 
-.flavor-icons {
+.cue-icons {
   display: flex;
   gap: 6px;
 }
 
-.flavor-icon {
+.cue-icon {
   display: grid;
   place-items: center;
   width: 36px;
@@ -366,7 +366,7 @@ body,
   animation: pop 0.4s ease-out both;
 }
 
-.flavor-icon.vague {
+.cue-icon.vague {
   font-size: 18px;
   font-weight: 800;
   color: #8a6a52;

@@ -208,11 +208,12 @@ export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement 
           key={cup.letter}
           letter={cup.letter}
           temperature={cup.temperature}
+          stoneCold={cup.stoneCold}
           position={[cupX(i, cups.length), CUP_TABLE_HEIGHT, 0]}
           selected={cup.letter === selectedLetter}
           showLabel={firstPersonLetter === null}
           freshCues={freshCues?.letter === cup.letter ? freshCues : undefined}
-          showFlavorIcons={firstPersonLetter === cup.letter}
+          showCueIcons={firstPersonLetter === cup.letter}
           onSelect={() => selectCup(cup.letter)}
           labelLayer={labelLayer}
         />

@@ -67,11 +67,12 @@ function ratingOutsideWindow(reference: Rating, { skewedCueChance, random }: Cue
  * The Tasting Cues a Cupping Step gives: Dry Fragrance and Break the Crust each give an Aroma cue,
  * and a Slurp gives one cue per Attribute. A cue is noted from the Reference Score inside the
  * Attribute's Accuracy Window; outside it, the cue is vague or skewed; from a stone-cold cup, it is always vague.
+ * Dry Fragrance smells the dry grounds before any water, so it counts as inside the window at any Cup Temperature.
  */
 export function cuesForStep(cup: BlindCupContent, step: CuppingStep, conditions: CueConditions): TastingCue[] {
   const { temperature, windows, vagueTastingNotes } = conditions
   const cue = (attribute: Attribute): TastingCue => {
-    const window = windows[attribute]
+    const window = step === 'dry-fragrance' ? 'inside' : windows[attribute]
     const reference = cup.referenceScore[attribute]
     const rating =
       window === 'inside' ? reference : window === 'stone-cold' ? undefined : ratingOutsideWindow(reference, conditions)

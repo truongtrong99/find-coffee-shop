@@ -63,7 +63,7 @@ export interface TastingCue {
   note: string
   /** The Cup Temperature when the cue was given. */
   temperature: number
-  /** Where that Cup Temperature sat against the Attribute's Accuracy Window. */
+  /** Where that Cup Temperature sat against the Attribute's Accuracy Window; always inside for Dry Fragrance. */
   window: WindowPosition
   /**
    * The rating the cue tastes of, for the presentation's particles, icons and reactions: the Reference
@@ -146,6 +146,8 @@ export interface BlindCupState {
   cues: TastingCue[]
   /** Where the current Cup Temperature sits against each Attribute's Accuracy Window. */
   windows: Record<Attribute, WindowPosition>
+  /** Whether the cup is stone cold, so every cue from it is vague. */
+  stoneCold: boolean
   /** The Player's Score Card for this cup, editable until Submit. */
   scoreCard: ScoreCard
   /** Whether every Attribute on this cup's Score Card is rated. */

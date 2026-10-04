@@ -1,4 +1,4 @@
-import { assertValidTastingTuning, windowPosition } from './accuracyWindows'
+import { assertValidTastingTuning, isStoneCold, windowPosition } from './accuracyWindows'
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
@@ -18,6 +18,7 @@ import type {
   NpcCupperContent,
   PerformedStep,
   RevealResult,
+  TastingCue,
   WindowPosition,
 } from './types'
 
@@ -43,8 +44,11 @@ export interface GameCore {
    * time: speed-up is the caller passing larger steps.
    */
   advanceClock(seconds: number): void
-  /** Performs a Cupping Step on the Blind Cup with this letter, adding its Tasting Cues to the cup's Cue Log. */
-  performStep(cupLetter: string, step: CuppingStep): void
+  /**
+   * Performs a Cupping Step on the Blind Cup with this letter, adding its Tasting Cues to the cup's Cue Log,
+   * and returns those cues.
+   */
+  performStep(cupLetter: string, step: CuppingStep): TastingCue[]
   /** Rates one Attribute on the Player's Score Card for the Blind Cup with this letter, replacing any earlier rating. */
   setRating(cupLetter: string, attribute: Attribute, rating: number): void
   /**
@@ -57,7 +61,7 @@ export interface GameCore {
 }
 
 /** What the core tracks for a Blind Cup; snapshots add what is derived from it. */
-type CupProgress = Omit<BlindCupState, 'scoreCardComplete' | 'windows'>
+type CupProgress = Omit<BlindCupState, 'scoreCardComplete' | 'windows' | 'stoneCold'>
 type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit'> & { cups: CupProgress[] }
 
 export function createGameCore({ content, random }: GameCoreDeps): GameCore {
@@ -148,17 +152,15 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
       const index = cupIndex(cupLetter)
       const cup = attempt.cups[index]!
       assertStepAllowed(cupLetter, cup.completedSteps, step)
-      replaceCup(index, {
-        ...cup,
-        completedSteps: [...cup.completedSteps, step],
-        cues: [...cup.cues, ...cuesForStep(cupContents[index]!, step, {
-          temperature: cup.temperature,
-          windows: windowsAt(cup.temperature),
-          vagueTastingNotes: content.vagueTastingNotes,
-          skewedCueChance: content.tuning.tasting.skewedCueChance,
-          random,
-        })],
+      const given = cuesForStep(cupContents[index]!, step, {
+        temperature: cup.temperature,
+        windows: windowsAt(cup.temperature),
+        vagueTastingNotes: content.vagueTastingNotes,
+        skewedCueChance: content.tuning.tasting.skewedCueChance,
+        random,
       })
+      replaceCup(index, { ...cup, completedSteps: [...cup.completedSteps, step], cues: [...cup.cues, ...given] })
+      return given.map((cue) => ({ ...cue }))
     },
     setRating(cupLetter, attribute, rating) {
       if (!attempt) throw new GameRuleError('No Attempt in progress to rate a Score Card in')
@@ -201,6 +203,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
             completedSteps: [...cup.completedSteps],
             cues: cup.cues.map((cue) => ({ ...cue })),
             windows: windowsAt(cup.temperature),
+            stoneCold: isStoneCold(cup.temperature, stoneColdTemperature),
             scoreCard: { ...cup.scoreCard },
             scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
           })),

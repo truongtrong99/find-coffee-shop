@@ -6,15 +6,15 @@ import { content } from '../../content/v1'
 import type { Rating, TastingCue } from '../../core'
 import { ATTRIBUTE_ICONS, reactionTo } from '../cueDisplay'
 
-const { startTemperature, stoneColdTemperature } = content.tuning.cooling
+const { ambientTemperature, startTemperature } = content.tuning.cooling
 const SURFACE_HEIGHT = 0.52
 
 const STEAM_PUFFS = 6
 const STEAM_RISE_PER_SECOND = 0.35
 
-/** Wisps rising from the cup, thicker the hotter it is and gone once stone cold. Follows the core's Cup Temperature. */
+/** Wisps rising from a cup that isn't stone cold, thicker the hotter it is. Follows the core's Cup Temperature. */
 export function Steam({ temperature }: { temperature: number }) {
-  const heat = Math.min(1, Math.max(0, (temperature - stoneColdTemperature) / (startTemperature - stoneColdTemperature)))
+  const steamStrength = Math.min(1, Math.max(0, (temperature - ambientTemperature) / (startTemperature - ambientTemperature)))
   const puffs = useRef<(Mesh | null)[]>([])
   useFrame(({ clock }) => {
     puffs.current.forEach((puff, i) => {
@@ -22,10 +22,9 @@ export function Steam({ temperature }: { temperature: number }) {
       const rise = (clock.elapsedTime * STEAM_RISE_PER_SECOND + i / STEAM_PUFFS) % 1
       puff.position.set(Math.sin(rise * 6 + i) * 0.1, SURFACE_HEIGHT + rise * 0.8, Math.cos(i * 2.3) * 0.12)
       puff.scale.setScalar(0.04 + rise * 0.09)
-      ;(puff.material as MeshBasicMaterial).opacity = heat * 0.35 * (1 - rise)
+      ;(puff.material as MeshBasicMaterial).opacity = steamStrength * 0.35 * (1 - rise)
     })
   })
-  if (heat === 0) return null
   return (
     <group>
       {Array.from({ length: STEAM_PUFFS }, (_, i) => (
@@ -76,7 +75,7 @@ export function AromaBurst({ rating }: { rating: Rating | undefined }) {
  * Above the cup in first-person: the Player's reaction and an icon per Attribute cued, bigger the higher
  * the rating it tastes of, a question mark when vague.
  */
-export function FlavorIcons({ cues, labelLayer }: { cues: readonly TastingCue[]; labelLayer: RefObject<HTMLDivElement | null> }) {
+export function CueIcons({ cues, labelLayer }: { cues: readonly TastingCue[]; labelLayer: RefObject<HTMLDivElement | null> }) {
   const reaction = reactionTo(cues)
   return (
     <Html position={[0, 0.75, 0]} center zIndexRange={[10, 0]} portal={labelLayer as RefObject<HTMLElement>}>
@@ -84,14 +83,14 @@ export function FlavorIcons({ cues, labelLayer }: { cues: readonly TastingCue[];
         <div className="reaction">
           {reaction.emoji} {reaction.text}
         </div>
-        <div className="flavor-icons">
+        <div className="cue-icons">
           {cues.map((cue) =>
             cue.suggestedRating === undefined ? (
-              <span key={cue.attribute} className="flavor-icon vague">
+              <span key={cue.attribute} className="cue-icon vague">
                 ?
               </span>
             ) : (
-              <span key={cue.attribute} className="flavor-icon" style={{ '--intensity': cue.suggestedRating } as CSSProperties}>
+              <span key={cue.attribute} className="cue-icon" style={{ '--intensity': cue.suggestedRating } as CSSProperties}>
                 {ATTRIBUTE_ICONS[cue.attribute]}
               </span>
             ),

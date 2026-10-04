@@ -24,6 +24,13 @@ const core = createGameCore({
   random: { next: Math.random },
 })
 
+/** The Tasting Cues the Player's latest Cupping Step gave, while their effects show; a new `id` restarts them. */
+export interface FreshCues {
+  id: number
+  letter: string
+  cues: TastingCue[]
+}
+
 interface GameStore {
   /** What the Lineup screen offers before an Attempt. */
   lineupOptions: LineupOptions
@@ -42,8 +49,8 @@ interface GameStore {
   firstPersonLetter: string | null
   /** Why the core rejected the Player's last command, if it did. */
   rejection: string | null
-  /** The Tasting Cues the Player's latest Cupping Step gave, while its effects show; `id` restarts them. */
-  freshCues: { id: number; letter: string; cues: TastingCue[] } | null
+  /** The Tasting Cues the Player's latest Cupping Step gave, while their effects show. */
+  freshCues: FreshCues | null
   /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
   toggleLineup(npcId: string): void
   /** Starts an Attempt with the chosen Lineup. */
@@ -104,17 +111,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
   performStep(step) {
     const letter = get().selectedLetter
-    const rejection = tryCommand(() => core.performStep(letter, step))
+    let cues: TastingCue[] = []
+    const rejection = tryCommand(() => {
+      cues = core.performStep(letter, step)
+    })
     if (rejection) return set({ rejection })
     clearTimeout(returnTimer)
     returnTimer = setTimeout(() => get().returnToDiorama(), FIRST_PERSON_REAL_SECONDS * 1000)
-    const attempt = core.getAttempt()!
-    const cueCountBefore = get().attempt!.cups.find((cup) => cup.letter === letter)!.cues.length
-    const cues = attempt.cups.find((cup) => cup.letter === letter)!.cues.slice(cueCountBefore)
     clearTimeout(freshCuesTimer)
     if (cues.length > 0) freshCuesTimer = setTimeout(() => set({ freshCues: null }), FRESH_CUES_REAL_SECONDS * 1000)
     set({
-      attempt,
+      attempt: core.getAttempt()!,
       firstPersonLetter: letter,
       rejection: null,
       freshCues: cues.length > 0 ? { id: ++freshCuesId, letter, cues } : null,

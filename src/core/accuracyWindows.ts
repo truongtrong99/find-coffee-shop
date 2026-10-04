@@ -14,9 +14,14 @@ export function assertValidTastingTuning({ accuracyWindows, skewedCueChance }: T
   }
 }
 
-/** Where `temperature` sits against an Accuracy Window; at or below the stone cold temperature, the cup is stone cold. */
+/** A cup is stone cold at or below the stone cold temperature. */
+export function isStoneCold(temperature: number, stoneColdTemperature: number): boolean {
+  return temperature <= stoneColdTemperature
+}
+
+/** Where `temperature` sits against an Accuracy Window; a stone-cold cup is stone cold whatever the window. */
 export function windowPosition(temperature: number, window: AccuracyWindow, stoneColdTemperature: number): WindowPosition {
-  if (temperature <= stoneColdTemperature) return 'stone-cold'
+  if (isStoneCold(temperature, stoneColdTemperature)) return 'stone-cold'
   if (temperature > window.max) return 'too-hot'
   if (temperature < window.min) return 'too-cold'
   return 'inside'

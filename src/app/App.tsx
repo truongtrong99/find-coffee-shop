@@ -21,7 +21,7 @@ const RATINGS = [1, 2, 3, 4, 5] as const
 const { ambientTemperature, startTemperature, stoneColdTemperature } = content.tuning.cooling
 const { accuracyWindows } = content.tuning.tasting
 
-/** Where a Cup Temperature falls along the thermometer, as a percentage from room temperature to the starting heat. */
+/** Where a Cup Temperature falls along the thermometer, as a percentage from room temperature to the starting temperature. */
 function thermometerPercent(temperature: number) {
   const percent = ((temperature - ambientTemperature) / (startTemperature - ambientTemperature)) * 100
   return Math.min(100, Math.max(0, percent))

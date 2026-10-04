@@ -20,6 +20,11 @@ function startedGame(session = SESSION) {
   return game
 }
 
+/** The current state of the Blind Cup with this letter. */
+function cup(game: ReturnType<typeof newGame>, letter: string) {
+  return game.getAttempt()!.cups.find((c) => c.letter === letter)!
+}
+
 /** Rates each listed Attribute on each listed cup's Score Card. */
 function rateAll(game: ReturnType<typeof newGame>, cards: Record<string, Partial<Record<Attribute, number>>>) {
   for (const [letter, card] of Object.entries(cards)) {
@@ -342,9 +347,6 @@ describe('rejecting commands that break the rules', () => {
 })
 
 describe('Cupping Steps and Tasting Cues', () => {
-  function cup(game: ReturnType<typeof newGame>, letter: string) {
-    return game.getAttempt()!.cups.find((c) => c.letter === letter)!
-  }
 
   it('starts every Blind Cup with no Cupping Steps done and an empty Cue Log', () => {
     const game = startedGame()
@@ -498,7 +500,7 @@ describe('Accuracy Windows for Tasting Cues', () => {
 
   /** The cues of the cup's latest Cupping Step, by Attribute. */
   function latestCues(game: ReturnType<typeof newGame>, letter: string) {
-    const cues = game.getAttempt()!.cups.find((c) => c.letter === letter)!.cues
+    const cues = cup(game, letter).cues
     return Object.fromEntries(cues.slice(-ATTRIBUTES.length).map((cue) => [cue.attribute, cue]))
   }
 
@@ -581,7 +583,7 @@ describe('Accuracy Windows for Tasting Cues', () => {
     })
   })
 
-  it('Dry Fragrance and Break the Crust follow the Aroma window too', () => {
+  it('Break the Crust follows the Aroma window too, but Dry Fragrance smells the dry grounds and is always accurate', () => {
     const game = newGame({ skewedCueChance: 0 })
     game.startAttempt(SESSION, [])
     game.performStep('A', 'pour')
@@ -590,14 +592,23 @@ describe('Accuracy Windows for Tasting Cues', () => {
     game.performStep('B', 'dry-fragrance')
     game.performStep('A', 'break-the-crust')
 
-    const aromaCue = (letter: string) => game.getAttempt()!.cups.find((c) => c.letter === letter)!.cues.at(-1)
-    expect(aromaCue('B')).toMatchObject({ step: 'dry-fragrance', note: 'aroma ?: hard to make out', window: 'too-cold' })
-    expect(aromaCue('A')).toMatchObject({ step: 'break-the-crust', note: 'aroma ?: hard to make out', window: 'too-cold' })
+    expect(cup(game, 'B').cues.at(-1)).toMatchObject({ step: 'dry-fragrance', note: 'aroma 2: faint', window: 'inside', suggestedRating: 2 })
+    expect(cup(game, 'A').cues.at(-1)).toMatchObject({ step: 'break-the-crust', note: 'aroma ?: hard to make out', window: 'too-cold' })
+  })
+
+  it('returns the Tasting Cues a Cupping Step gave, as added to the Cue Log', () => {
+    const game = readyToSlurp(120)
+
+    const given = game.performStep('A', 'slurp')
+
+    expect(given.map((cue) => cue.attribute)).toEqual(ATTRIBUTES)
+    expect(given).toEqual(cup(game, 'A').cues.slice(-ATTRIBUTES.length))
+    expect(game.performStep('B', 'slurp')).toHaveLength(ATTRIBUTES.length)
   })
 
   it('shows where each cup\'s current temperature sits against every Attribute\'s window, so Slurps can be timed', () => {
     const game = readyToSlurp(0)
-    const windows = () => game.getAttempt()!.cups.map((cup) => cup.windows)
+    const windows = () => game.getAttempt()!.cups.map((c) => c.windows)
 
     expect(windows()[0]).toEqual({ aroma: 'inside', flavor: 'too-hot', acidity: 'too-hot', body: 'too-hot', sweetness: 'too-hot' })
 
@@ -607,9 +618,12 @@ describe('Accuracy Windows for Tasting Cues', () => {
     game.advanceClock(50) // 46.46°C
     expect(windows()[0]).toEqual({ aroma: 'too-cold', flavor: 'inside', acidity: 'inside', body: 'too-cold', sweetness: 'inside' })
 
+    expect(cup(game, 'A').stoneCold).toBe(false)
+
     game.advanceClock(180) // 26.15°C
     expect(new Set(Object.values(windows()[0]!))).toEqual(new Set(['stone-cold']))
     expect(new Set(windows().map((w) => JSON.stringify(w))).size).toBe(1)
+    expect(game.getAttempt()!.cups.map((c) => c.stoneCold)).toEqual([true, true, true])
   })
 
   it('rejects an Accuracy Window whose coolest temperature is above its hottest', () => {
