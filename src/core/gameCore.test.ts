@@ -144,7 +144,7 @@ describe('Cupping Steps and Tasting Cues', () => {
     return game
   }
 
-  it('starts every Blind Cup with no Cupping Steps done and an empty cue log', () => {
+  it('starts every Blind Cup with no Cupping Steps done and an empty Cue Log', () => {
     const game = startedGame()
 
     expect(game.getAttempt()!.cups.map((c) => [c.completedSteps, c.cues])).toEqual([
@@ -154,7 +154,7 @@ describe('Cupping Steps and Tasting Cues', () => {
     ])
   })
 
-  it('Dry Fragrance on a fresh cup adds an Aroma cue to its cue log', () => {
+  it('Dry Fragrance on a fresh cup adds an Aroma cue to its Cue Log', () => {
     const game = startedGame()
 
     game.performStep('A', 'dry-fragrance')

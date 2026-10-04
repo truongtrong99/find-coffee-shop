@@ -25,7 +25,7 @@ The Player exiting a Lab back to the menu or map; leaving mid-Attempt discards t
 _Avoid_: Quit lab
 
 **Cupping Step**:
-One stage of cupping a coffee, in order: Dry Fragrance, Pour, Break the Crust, Skim, Slurp. Slurp may be repeated as the cup cools.
+One stage of cupping a coffee, in order: Dry Fragrance, Pour, Break the Crust, Skim, Slurp. Dry Fragrance is optional but only possible before Pour; Slurp may be repeated as the cup cools.
 _Avoid_: Phase, action
 
 **Cup Temperature**:
@@ -89,8 +89,12 @@ How closely the Player's Score Card matches the Reference Score for a coffee; th
 _Avoid_: Accuracy
 
 **Tasting Cue**:
-A hint about a coffee's Attributes given to the Player during cupping: a tasting note, a visual or sensory effect, or an NPC Cupper's remark.
+A piece of evidence about a coffee's Attributes given to the Player during cupping: a tasting note, a visual or sensory effect, or an NPC Cupper's remark.
 _Avoid_: Clue, hint, flavor text
+
+**Cue Log**:
+The record of every Tasting Cue the Player has received about one Blind Cup during an Attempt, oldest first.
+_Avoid_: Cue history, notes, journal
 
 **Accuracy Window**:
 The Cup Temperature range in which a Slurp gives accurate Tasting Cues for a given Attribute; outside it, cues are vague or skewed.

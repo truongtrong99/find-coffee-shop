@@ -32,7 +32,7 @@ export interface BlindCupContent {
 /** The Cupping Steps, in the order they are performed on a cup. Slurp may repeat. */
 export type CuppingStep = 'dry-fragrance' | 'pour' | 'break-the-crust' | 'skim' | 'slurp'
 
-/** A tasting-note hint about one Attribute, received from a Cupping Step. */
+/** A tasting note about one Attribute, received from a Cupping Step. */
 export interface TastingCue {
   step: CuppingStep
   attribute: Attribute
@@ -62,7 +62,7 @@ export interface BlindCupState {
   temperature: number
   /** Cupping Steps performed on this cup, in order; each Slurp is listed. */
   completedSteps: CuppingStep[]
-  /** The cue log: every Tasting Cue received from this cup, oldest first. */
+  /** The Cue Log: every Tasting Cue received about this cup, oldest first. */
   cues: TastingCue[]
 }
 

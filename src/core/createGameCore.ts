@@ -18,7 +18,7 @@ export interface GameCore {
    * time: speed-up is the caller passing larger steps.
    */
   advanceClock(seconds: number): void
-  /** Performs a Cupping Step on the Blind Cup with this letter, adding its Tasting Cues to the cup's cue log. */
+  /** Performs a Cupping Step on the Blind Cup with this letter, adding its Tasting Cues to the cup's Cue Log. */
   performStep(cupLetter: string, step: CuppingStep): void
   /** The current Attempt, or undefined when none is in progress. A fresh snapshot each call. */
   getAttempt(): AttemptState | undefined

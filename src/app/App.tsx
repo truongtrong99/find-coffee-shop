@@ -106,7 +106,7 @@ function CuppingPanel() {
         </button>
       )}
 
-      <h3>Cue log</h3>
+      <h3>Cue Log</h3>
       {cup.cues.length === 0 ? (
         <p className="empty">No Tasting Cues yet. Start with Dry Fragrance or Pour.</p>
       ) : (
