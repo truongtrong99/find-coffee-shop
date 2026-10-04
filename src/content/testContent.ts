@@ -9,8 +9,13 @@ const tastingNotes: TastingNotes = {
   sweetness: { 1: 'sweetness 1: bitter', 2: 'sweetness 2: dry', 3: 'sweetness 3: caramel', 4: 'sweetness 4: honeyed', 5: 'sweetness 5: candied' },
 }
 
+export interface TestTuningOverrides {
+  cooling?: Partial<GameContent['tuning']['cooling']>
+  npcScoreNoise?: number
+}
+
 /** Small fixture content for facade tests; independent of the shipped v1 content. */
-export function makeTestContent(overrides: Partial<GameContent['tuning']['cooling']> = {}): GameContent {
+export function makeTestContent({ cooling = {}, npcScoreNoise = 0 }: TestTuningOverrides = {}): GameContent {
   return {
     tuning: {
       cooling: {
@@ -18,13 +23,45 @@ export function makeTestContent(overrides: Partial<GameContent['tuning']['coolin
         ambientTemperature: 20,
         stoneColdTemperature: 30,
         secondsToStoneCold: 240,
-        ...overrides,
+        ...cooling,
       },
+      npcScoreNoise,
     },
+    npcCuppers: [
+      {
+        id: 'pip',
+        name: 'Pip',
+        unlock: { kind: 'starter' },
+        personalityBias: { acidity: 2, sweetness: -1 },
+        schedule: { secondsBetweenSteps: 5, slurpTemperatures: [70] },
+      },
+      {
+        id: 'mochi',
+        name: 'Mochi',
+        unlock: { kind: 'starter' },
+        personalityBias: { body: 1 },
+        schedule: { secondsBetweenSteps: 4, slurpTemperatures: [50] },
+      },
+      {
+        id: 'juniper',
+        name: 'Juniper',
+        unlock: { kind: 'starter' },
+        personalityBias: { aroma: -3, flavor: 1 },
+        schedule: { secondsBetweenSteps: 6, slurpTemperatures: [65, 40] },
+      },
+      {
+        id: 'biscuit',
+        name: 'Biscuit',
+        unlock: { kind: 'total-stars', stars: 6 },
+        personalityBias: { flavor: 1 },
+        schedule: { secondsBetweenSteps: 5, slurpTemperatures: [60] },
+      },
+    ],
     labs: [
       {
         id: 'lab-1',
         name: 'Test Lab',
+        seats: 2,
         sessions: [
           {
             id: 'lab-1-session-1',
@@ -40,6 +77,7 @@ export function makeTestContent(overrides: Partial<GameContent['tuning']['coolin
       {
         id: 'lab-2',
         name: 'Test Lab 2',
+        seats: 4,
         sessions: [
           {
             id: 'lab-2-session-1',

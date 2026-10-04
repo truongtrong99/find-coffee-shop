@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { firstSession } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { CuppingStep, RevealedCup, StarCount } from '../core'
+import type { AttemptState, CuppingStep, RevealedCup, StarCount } from '../core'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
 
@@ -38,7 +38,7 @@ function formatClock(seconds: number) {
 function Hud() {
   const speed = useGameStore((s) => s.speed)
   const setSpeed = useGameStore((s) => s.setSpeed)
-  const elapsed = useGameStore((s) => s.attempt.elapsedSeconds)
+  const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
   return (
     <div className="hud">
       <h1>{firstSession.name}</h1>
@@ -54,12 +54,51 @@ function Hud() {
   )
 }
 
+function LineupScreen() {
+  const { seats, npcCuppers } = useGameStore((s) => s.lineupOptions)
+  const lineup = useGameStore((s) => s.lineup)
+  const rejection = useGameStore((s) => s.rejection)
+  const { toggleLineup, startAttempt } = useGameStore.getState()
+  return (
+    <div className="reveal-backdrop">
+      <section className="lineup" aria-label="Lineup">
+        <h2>Who's cupping with you?</h2>
+        <p>
+          {seats} Seats at this table, {lineup.length} filled. Leave a Seat empty to cup with fewer NPC Cuppers.
+        </p>
+        <div className="lineup-picks" role="group" aria-label="NPC Cuppers">
+          {npcCuppers.map((npc) => {
+            const seat = lineup.indexOf(npc.id)
+            return (
+              <button key={npc.id} aria-pressed={seat !== -1} onClick={() => toggleLineup(npc.id)}>
+                {npc.name}
+                <small>{seat === -1 ? 'Not seated' : `Seat ${seat + 1}`}</small>
+              </button>
+            )
+          })}
+        </div>
+        {rejection && (
+          <p className="rejection" role="alert">
+            {rejection}
+          </p>
+        )}
+        <button className="again" onClick={startAttempt}>
+          Start cupping
+        </button>
+      </section>
+    </div>
+  )
+}
+
 function CuppingPanel() {
-  const cups = useGameStore((s) => s.attempt.cups)
+  const attempt = useGameStore((s) => s.attempt)
+  return attempt && <AttemptPanel attempt={attempt} />
+}
+
+function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState }) {
   const selectedLetter = useGameStore((s) => s.selectedLetter)
   const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
   const rejection = useGameStore((s) => s.rejection)
-  const canSubmit = useGameStore((s) => s.attempt.canSubmit)
   const { selectCup, performStep, returnToDiorama, setRating, submit } = useGameStore.getState()
   const cup = cups.find((c) => c.letter === selectedLetter)!
   const logEnd = useRef<HTMLLIElement>(null)
@@ -172,9 +211,14 @@ function RevealCard({ cup }: { cup: RevealedCup }) {
         <thead>
           <tr>
             <th scope="col">Attribute</th>
-            <th scope="col">Reference</th>
+            <th scope="col">Ref.</th>
             <th scope="col">You</th>
             <th scope="col">Points</th>
+            {cup.npcScoreCards.map((npc) => (
+              <th key={npc.id} scope="col">
+                {npc.name}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -184,6 +228,11 @@ function RevealCard({ cup }: { cup: RevealedCup }) {
               <td>{cup.referenceScore[attribute]}</td>
               <td>{cup.scoreCard[attribute]}</td>
               <td className={`points-${cup.calibrationPoints[attribute]}`}>+{cup.calibrationPoints[attribute]}</td>
+              {cup.npcScoreCards.map((npc) => (
+                <td key={npc.id} className="npc-rating">
+                  {npc.scoreCard[attribute]}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -222,6 +271,7 @@ function Reveal() {
 export function App() {
   useGameLoop()
   const labelLayer = useRef<HTMLDivElement>(null)
+  const choosingLineup = useGameStore((s) => s.attempt === null)
   return (
     <>
       <Canvas
@@ -233,7 +283,7 @@ export function App() {
       </Canvas>
       <div ref={labelLayer} className="label-layer" />
       <Hud />
-      <CuppingPanel />
+      {choosingLineup ? <LineupScreen /> : <CuppingPanel />}
       <Reveal />
     </>
   )

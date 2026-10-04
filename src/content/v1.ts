@@ -39,7 +39,7 @@ const houseTastingNotes: TastingNotes = {
   },
 }
 
-/** Walking-skeleton content: one Lab with one hard-coded Cupping Session of 3 Blind Cups. */
+/** Walking-skeleton content: one Lab with one hard-coded Cupping Session of 3 Blind Cups, and the 2 starter NPC Cuppers. */
 export const content: GameContent = {
   tuning: {
     cooling: {
@@ -49,11 +49,35 @@ export const content: GameContent = {
       // Hot to cold in 4 game minutes at normal speed.
       secondsToStoneCold: 240,
     },
+    // NPC ratings stray up to ¾ of a cup from Reference Score plus Personality Bias, so roughly
+    // half of them land one cup off.
+    npcScoreNoise: 0.75,
   },
+  npcCuppers: [
+    {
+      id: 'pip',
+      name: 'Pip',
+      unlock: { kind: 'starter' },
+      // Loves bright coffees.
+      personalityBias: { acidity: 1, body: -1 },
+      // Impatient: rushes through the steps and slurps while the cups are still hot.
+      schedule: { secondsBetweenSteps: 3, slurpTemperatures: [70, 58] },
+    },
+    {
+      id: 'mochi',
+      name: 'Mochi',
+      unlock: { kind: 'starter' },
+      // Has a sweet tooth.
+      personalityBias: { sweetness: 1, aroma: 1 },
+      // Patient: takes their time and waits for the cups to cool.
+      schedule: { secondsBetweenSteps: 6, slurpTemperatures: [55, 42, 34] },
+    },
+  ],
   labs: [
     {
       id: 'lab-1',
       name: 'The First Lab',
+      seats: 2,
       sessions: [
         {
           id: 'lab-1-session-1',

@@ -73,6 +73,30 @@ body,
   text-align: center;
 }
 
+.cupper-label {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: rgba(255, 250, 240, 0.85);
+  color: #4a3222;
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.cupper-label small {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cupper-label.performing {
+  background: #4a3222;
+  color: #fff;
+}
+
 .cup-label.selected {
   background: #e07a5f;
   color: #fff;
@@ -294,14 +318,17 @@ body,
 
 .reveal-cups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
 }
 
 .reveal-cup {
+  min-width: 0;
   padding: 12px 14px;
   border-radius: 14px;
   background: #fff;
+  /* Each NPC Cupper in the Lineup adds a column; scroll rather than clip a full table. */
+  overflow-x: auto;
 }
 
 .reveal-cup h3 {
@@ -329,14 +356,14 @@ body,
 
 .reveal-cup th,
 .reveal-cup td {
-  padding: 3px 4px;
+  padding: 3px 2px;
   text-align: center;
 }
 
 .reveal-cup thead th {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: #a0785a;
 }
 
@@ -354,11 +381,16 @@ body,
   font-weight: 700;
 }
 
+.reveal-cup .npc-rating {
+  color: #7a5f4a;
+}
+
 .reveal-cup .points-0 {
   color: #b9a08c;
 }
 
-.reveal .again {
+.reveal .again,
+.lineup .again {
   align-self: center;
   min-height: 44px;
   padding: 0 24px;
@@ -369,4 +401,60 @@ body,
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.lineup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(520px, 100%);
+  padding: 18px 20px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  background: #fffaf0;
+  color: #4a3222;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(74, 50, 34, 0.35);
+}
+
+.lineup h2,
+.lineup p {
+  margin: 0;
+}
+
+.lineup-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.lineup-picks button {
+  min-height: 64px;
+  border: 2px solid #4a3222;
+  border-radius: 14px;
+  background: #fff;
+  color: #4a3222;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.lineup-picks button small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lineup-picks button[aria-pressed='true'] {
+  background: #4a3222;
+  color: #fff;
+}
+
+.lineup .rejection {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fde2dc;
+  color: #8a2a17;
+  font-size: 14px;
 }

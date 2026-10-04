@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { content, firstSession } from '../content/v1'
 import { createGameCore, GameRuleError } from '../core'
-import type { AttemptState, Attribute, CuppingStep, RevealResult } from '../core'
+import type { AttemptState, Attribute, CuppingStep, LineupOptions, RevealResult } from '../core'
 import { createLocalStorageSaveStore } from './localStorageSaveStore'
 
 export const SPEEDS = [1, 2, 4, 8] as const
@@ -20,11 +20,14 @@ const core = createGameCore({
   saveStore: createLocalStorageSaveStore(),
   random: { next: Math.random },
 })
-core.startAttempt(firstSession.id)
 
 interface GameStore {
-  /** The Attempt in progress, or the last snapshot of it once Submitted. */
-  attempt: AttemptState
+  /** What the Lineup screen offers before an Attempt. */
+  lineupOptions: LineupOptions
+  /** The NPC Cuppers picked for the next Attempt, in Seat order. */
+  lineup: string[]
+  /** The Attempt in progress, the last snapshot of it once Submitted, or null while choosing a Lineup. */
+  attempt: AttemptState | null
   /** The Reveal of the Submitted Attempt, or null while cupping. */
   reveal: RevealResult | null
   speed: Speed
@@ -34,13 +37,17 @@ interface GameStore {
   firstPersonLetter: string | null
   /** Why the core rejected the Player's last command, if it did. */
   rejection: string | null
+  /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
+  toggleLineup(npcId: string): void
+  /** Starts an Attempt with the chosen Lineup. */
+  startAttempt(): void
   setSpeed(speed: Speed): void
   selectCup(letter: string): void
   performStep(step: CuppingStep): void
   /** Rates an Attribute on the selected Blind Cup's Score Card. */
   setRating(attribute: Attribute, rating: number): void
   submit(): void
-  /** Starts a fresh Attempt of the same Cupping Session after the Reveal. */
+  /** Returns to the Lineup screen for a fresh Attempt of the same Cupping Session after the Reveal. */
   cupAgain(): void
   returnToDiorama(): void
   /** Passes elapsed real time to the core as a game-time step; the core decides what it means. */
@@ -61,12 +68,23 @@ function tryCommand(command: () => void): string | null {
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
-  attempt: core.getAttempt()!,
+  lineupOptions: core.getLineupOptions(firstSession.id),
+  lineup: [],
+  attempt: null,
   reveal: null,
   speed: 1,
   selectedLetter: firstSession.cups[0]!.letter,
   firstPersonLetter: null,
   rejection: null,
+  toggleLineup(npcId) {
+    const { lineup } = get()
+    set({ lineup: lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId], rejection: null })
+  },
+  startAttempt() {
+    const rejection = tryCommand(() => core.startAttempt(firstSession.id, get().lineup))
+    if (rejection) return set({ rejection })
+    set({ attempt: core.getAttempt()!, selectedLetter: firstSession.cups[0]!.letter, rejection: null })
+  },
   setSpeed: (speed) => set({ speed }),
   selectCup(letter) {
     clearTimeout(returnTimer)
@@ -94,16 +112,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ reveal, firstPersonLetter: null, rejection: null })
   },
   cupAgain() {
-    core.startAttempt(firstSession.id)
-    set({ attempt: core.getAttempt()!, reveal: null, selectedLetter: firstSession.cups[0]!.letter, rejection: null })
+    set({ lineupOptions: core.getLineupOptions(firstSession.id), attempt: null, reveal: null, rejection: null })
   },
   returnToDiorama() {
     clearTimeout(returnTimer)
     set({ firstPersonLetter: null })
   },
   tick(realSeconds) {
-    // There is no Attempt left to advance once the Player has Submitted.
-    if (get().reveal) return
+    // The clock only runs during an Attempt: not while choosing a Lineup, nor once the Player has Submitted.
+    if (!get().attempt || get().reveal) return
     core.advanceClock(Math.min(Math.max(realSeconds, 0), MAX_REAL_STEP_SECONDS) * get().speed)
     set({ attempt: core.getAttempt()! })
   },

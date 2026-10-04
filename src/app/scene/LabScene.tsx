@@ -1,6 +1,8 @@
 import { useFrame } from '@react-three/fiber'
 import { useRef, type RefObject } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
+import { STEP_NAMES } from '../../core'
+import type { BlindCupState, PerformedStep } from '../../core'
 import { useGameStore } from '../store'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
@@ -11,6 +13,22 @@ const CUP_TABLE_HEIGHT = 1
 function cupX(index: number, count: number) {
   return index * CUP_SPACING - ((count - 1) * CUP_SPACING) / 2
 }
+
+const NO_CUPS: BlindCupState[] = []
+
+/** The Player sits at the front of the table; NPC Cuppers fill the Seats behind it, then the ends. */
+const PLAYER_POSITION: [number, number, number] = [0, 0, 2.2]
+const SEAT_POSITIONS: [number, number, number][] = [
+  [-1.1, 0, -2.2],
+  [1.1, 0, -2.2],
+  [-3.1, 0, 0],
+  [3.1, 0, 0],
+]
+const NPC_COLORS = ['#81b29a', '#f2cc8f', '#9c89b8', '#6d9dc5', '#f4a261', '#90be6d', '#c77dff', '#4d908e']
+const TABLE_CENTRE: [number, number] = [0, 0]
+
+/** Game seconds an NPC Cupper is shown performing a Cupping Step; following the core's clock. */
+const STEP_SHOWN_GAME_SECONDS = 2.5
 
 interface CameraPose {
   position: Vector3
@@ -83,8 +101,57 @@ function Table() {
   )
 }
 
+interface SeatedNpc {
+  id: string
+  name: string
+  latestStep: PerformedStep | undefined
+}
+
+/** The NPC Cuppers in their Seats: the Attempt's Lineup, or the one being chosen before it starts. */
+function useSeatedNpcs(): SeatedNpc[] {
+  const npcCuppers = useGameStore((s) => s.attempt?.npcCuppers)
+  const lineup = useGameStore((s) => s.lineup)
+  const options = useGameStore((s) => s.lineupOptions)
+  if (npcCuppers) return npcCuppers.map(({ id, name, steps }) => ({ id, name, latestStep: steps.at(-1) }))
+  return lineup.map((id) => ({ id, name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id, latestStep: undefined }))
+}
+
+function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivElement | null>; showLabels: boolean }) {
+  const seated = useSeatedNpcs()
+  const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
+  const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
+  const options = useGameStore((s) => s.lineupOptions)
+  return seated.map(({ id, name, latestStep }, seat) => {
+    const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
+    const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1
+    const colorIndex = options.npcCuppers.findIndex((npc) => npc.id === id)
+    return (
+      <Cupper
+        key={id}
+        position={SEAT_POSITIONS[seat]!}
+        color={NPC_COLORS[colorIndex % NPC_COLORS.length]}
+        facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
+        leaning={cupIndex !== -1}
+        labelLayer={labelLayer}
+        label={
+          showLabels && (
+            <div className={performing ? 'cupper-label performing' : 'cupper-label'}>
+              {name}
+              {performing && (
+                <small>
+                  {STEP_NAMES[performing.step]} · Cup {performing.cupLetter}
+                </small>
+              )}
+            </div>
+          )
+        }
+      />
+    )
+  })
+}
+
 export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement | null> }) {
-  const cups = useGameStore((s) => s.attempt.cups)
+  const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
   const selectedLetter = useGameStore((s) => s.selectedLetter)
   const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
   const selectCup = useGameStore((s) => s.selectCup)
@@ -117,7 +184,8 @@ export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement 
           labelLayer={labelLayer}
         />
       ))}
-      <Cupper position={[0, 0, 2.2]} />
+      <Cupper position={PLAYER_POSITION} facing={TABLE_CENTRE} />
+      <NpcCuppers labelLayer={labelLayer} showLabels={firstPersonLetter === null} />
     </>
   )
 }

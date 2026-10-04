@@ -1,6 +1,7 @@
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
+import { isUnlocked, npcScoreCard, planSchedule, seatLineup } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
 import { ATTRIBUTE_NAMES, isRating, revealAttempt, unratedAttributes } from './scoring'
 import type {
@@ -8,8 +9,13 @@ import type {
   Attribute,
   BlindCupContent,
   BlindCupState,
+  CuppingSessionContent,
   CuppingStep,
   GameContent,
+  LabContent,
+  LineupOptions,
+  NpcCupperContent,
+  PerformedStep,
   RevealResult,
 } from './types'
 
@@ -20,8 +26,14 @@ export interface GameCoreDeps {
 }
 
 export interface GameCore {
-  /** Starts an Attempt of a Cupping Session with every Blind Cup on the table. */
-  startAttempt(sessionId: string): void
+  /** The Lab's Seat count and the NPC Cuppers available for a Lineup in this Cupping Session. */
+  getLineupOptions(sessionId: string): LineupOptions
+  /**
+   * Starts an Attempt of a Cupping Session with every Blind Cup on the table and the Lineup's
+   * NPC Cuppers (by id) in the Seats. Rejected if the Lineup has a locked or repeated NPC Cupper
+   * or more NPC Cuppers than Seats; Seats may be left empty.
+   */
+  startAttempt(sessionId: string, lineup: readonly string[]): void
   /**
    * Advances the game clock by `seconds` of game time. The core has no notion of real
    * time: speed-up is the caller passing larger steps.
@@ -42,12 +54,15 @@ export interface GameCore {
 
 /** What the core tracks for a Blind Cup; snapshots add what is derived from it. */
 type CupProgress = Omit<BlindCupState, 'scoreCardComplete'>
-type AttemptProgress = Omit<AttemptState, 'cups' | 'canSubmit'> & { cups: CupProgress[] }
+type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit'> & { cups: CupProgress[] }
 
-export function createGameCore({ content }: GameCoreDeps): GameCore {
-  const temperatureAt = createCoolingCurve(content.tuning.cooling)
+export function createGameCore({ content, random }: GameCoreDeps): GameCore {
+  const cooling = createCoolingCurve(content.tuning.cooling)
+  const { temperatureAt } = cooling
   let attempt: AttemptProgress | undefined
   let cupContents: BlindCupContent[] = []
+  /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
+  let seated: { npc: NpcCupperContent; plannedSteps: PerformedStep[] }[] = []
 
   function cupIndex(cupLetter: string): number {
     const index = cupContents.findIndex((cup) => cup.letter === cupLetter)
@@ -59,10 +74,29 @@ export function createGameCore({ content }: GameCoreDeps): GameCore {
     attempt = { ...attempt!, cups: attempt!.cups.map((c, i) => (i === index ? cup : c)) }
   }
 
+  function findSession(sessionId: string): { lab: LabContent; session: CuppingSessionContent } {
+    for (const lab of content.labs) {
+      const session = lab.sessions.find((s) => s.id === sessionId)
+      if (session) return { lab, session }
+    }
+    throw new GameRuleError(`Unknown Cupping Session "${sessionId}"`)
+  }
+
   return {
-    startAttempt(sessionId) {
-      const session = content.labs.flatMap((lab) => lab.sessions).find((s) => s.id === sessionId)
-      if (!session) throw new GameRuleError(`Unknown Cupping Session "${sessionId}"`)
+    getLineupOptions(sessionId) {
+      const { lab } = findSession(sessionId)
+      return {
+        seats: lab.seats,
+        npcCuppers: content.npcCuppers.filter(isUnlocked).map(({ id, name }) => ({ id, name })),
+      }
+    },
+    startAttempt(sessionId, lineup) {
+      const { lab, session } = findSession(sessionId)
+      const letters = session.cups.map((cup) => cup.letter)
+      seated = seatLineup(content.npcCuppers, lab.seats, lineup).map((npc) => ({
+        npc,
+        plannedSteps: planSchedule(npc.schedule, letters, cooling),
+      }))
       cupContents = session.cups
       attempt = {
         sessionId,
@@ -119,7 +153,15 @@ export function createGameCore({ content }: GameCoreDeps): GameCore {
       }
       const reveal = revealAttempt(
         attempt.sessionId,
-        cupContents.map((cup, i) => ({ content: cup, scoreCard: attempt!.cups[i]!.scoreCard })),
+        cupContents.map((cup, i) => ({
+          content: cup,
+          scoreCard: attempt!.cups[i]!.scoreCard,
+          npcScoreCards: seated.map(({ npc }) => ({
+            id: npc.id,
+            name: npc.name,
+            scoreCard: npcScoreCard(npc, cup.referenceScore, content.tuning.npcScoreNoise, random),
+          })),
+        })),
       )
       attempt = undefined
       return reveal
@@ -134,6 +176,11 @@ export function createGameCore({ content }: GameCoreDeps): GameCore {
             cues: cup.cues.map((cue) => ({ ...cue })),
             scoreCard: { ...cup.scoreCard },
             scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
+          })),
+          npcCuppers: seated.map(({ npc, plannedSteps }) => ({
+            id: npc.id,
+            name: npc.name,
+            steps: plannedSteps.filter((s) => s.atSeconds <= attempt!.elapsedSeconds).map((s) => ({ ...s })),
           })),
           canSubmit: attempt.cups.every((cup) => unratedAttributes(cup.scoreCard).length === 0),
         }

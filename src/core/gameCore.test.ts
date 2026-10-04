@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { makeTestContent } from '../content/testContent'
+import type { TestTuningOverrides } from '../content/testContent'
 import { ATTRIBUTES, createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
 import type { Attribute, Rating } from '.'
 
 const SESSION = 'lab-1-session-1'
 
-function newGame(coolingOverrides = {}) {
+function newGame(tuning: TestTuningOverrides = {}, seed = 1) {
   return createGameCore({
-    content: makeTestContent(coolingOverrides),
+    content: makeTestContent(tuning),
     saveStore: createMemorySaveStore(),
-    random: createSeededRandom(1),
+    random: createSeededRandom(seed),
   })
 }
 
 function startedGame(session = SESSION) {
   const game = newGame()
-  game.startAttempt(session)
+  game.startAttempt(session, [])
   return game
 }
 
@@ -30,7 +31,7 @@ describe('starting an Attempt', () => {
   it('puts every Blind Cup on the table, labelled by letter, at the same starting Cup Temperature', () => {
     const game = newGame()
 
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     const attempt = game.getAttempt()
     expect(attempt?.cups.map((cup) => cup.letter)).toEqual(['A', 'B', 'C'])
@@ -38,10 +39,193 @@ describe('starting an Attempt', () => {
   })
 })
 
+describe('choosing a Lineup', () => {
+  it('offers the unlocked NPC Cuppers and the Lab\'s Seat count', () => {
+    expect(newGame().getLineupOptions(SESSION)).toEqual({
+      seats: 2,
+      npcCuppers: [
+        { id: 'pip', name: 'Pip' },
+        { id: 'mochi', name: 'Mochi' },
+        { id: 'juniper', name: 'Juniper' },
+      ],
+    })
+    expect(newGame().getLineupOptions('lab-2-session-1').seats).toBe(4)
+  })
+
+  it('seats the Lineup\'s NPC Cuppers at the table, in Lineup order', () => {
+    const game = newGame()
+
+    game.startAttempt(SESSION, ['mochi', 'pip'])
+
+    expect(game.getAttempt()!.npcCuppers.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: 'mochi', name: 'Mochi' },
+      { id: 'pip', name: 'Pip' },
+    ])
+  })
+
+  it('allows leaving Seats empty, even all of them', () => {
+    const one = newGame()
+    one.startAttempt(SESSION, ['juniper'])
+    const none = newGame()
+    none.startAttempt(SESSION, [])
+
+    expect(one.getAttempt()!.npcCuppers.map((npc) => npc.id)).toEqual(['juniper'])
+    expect(none.getAttempt()!.npcCuppers).toEqual([])
+  })
+
+  it.each([
+    { lineup: ['pip', 'biscuit'], reason: /Biscuit.*locked/ },
+    { lineup: ['pip', 'pip'], reason: /Pip.*one Seat/ },
+    { lineup: ['pip', 'mochi', 'juniper'], reason: /3 NPC Cuppers.*2 Seats/ },
+    { lineup: ['nobody'], reason: /no NPC Cupper "nobody"/ },
+  ])('rejects the Lineup $lineup without starting an Attempt', ({ lineup, reason }) => {
+    const game = newGame()
+
+    expect(() => game.startAttempt(SESSION, lineup)).toThrow(GameRuleError)
+    expect(() => game.startAttempt(SESSION, lineup)).toThrow(reason)
+    expect(game.getAttempt()).toBeUndefined()
+  })
+
+  it('fills up to the Seat count in a Lab with more Seats', () => {
+    const game = newGame()
+
+    game.startAttempt('lab-2-session-1', ['pip', 'mochi', 'juniper'])
+
+    expect(game.getAttempt()!.npcCuppers).toHaveLength(3)
+  })
+})
+
+describe('NPC Cuppers cupping on their own schedules', () => {
+  function seatedGame(...lineup: string[]) {
+    const game = newGame()
+    game.startAttempt(SESSION, lineup)
+    return game
+  }
+
+  function stepsOf(game: ReturnType<typeof newGame>, npcId: string) {
+    return game.getAttempt()!.npcCuppers.find((npc) => npc.id === npcId)!.steps
+  }
+
+  /** Steps as `letter step @ seconds`, so a whole schedule fits on a line. */
+  function scheduleOf(game: ReturnType<typeof newGame>, npcId: string) {
+    return stepsOf(game, npcId).map((s) => `${s.cupLetter} ${s.step} @ ${Math.round(s.atSeconds * 10) / 10}`)
+  }
+
+  it('have done nothing when the Attempt starts', () => {
+    expect(stepsOf(seatedGame('pip', 'mochi'), 'pip')).toEqual([])
+  })
+
+  // Pip takes a Cupping Step every 5 game seconds and slurps at 70°C or cooler.
+  it('perform each Cupping Step on every cup in turn, one at a time, as the clock advances', () => {
+    const game = seatedGame('pip')
+
+    game.advanceClock(4.9)
+    expect(scheduleOf(game, 'pip')).toEqual([])
+
+    game.advanceClock(15.1)
+    expect(scheduleOf(game, 'pip')).toEqual([
+      'A dry-fragrance @ 5',
+      'B dry-fragrance @ 10',
+      'C dry-fragrance @ 15',
+      'A pour @ 20',
+    ])
+
+    game.advanceClock(100)
+    expect(scheduleOf(game, 'pip').slice(4)).toEqual([
+      'B pour @ 25',
+      'C pour @ 30',
+      'A break-the-crust @ 35',
+      'B break-the-crust @ 40',
+      'C break-the-crust @ 45',
+      'A skim @ 50',
+      'B skim @ 55',
+      'C skim @ 60',
+      // The cups have already cooled below 70°C (63°C at 60s), so impatient Pip slurps straight away.
+      'A slurp @ 65',
+      'B slurp @ 70',
+      'C slurp @ 75',
+    ])
+  })
+
+  it('record the Cup Temperature of every step, so a Slurp shows how hot the cup was', () => {
+    const game = seatedGame('pip')
+
+    game.advanceClock(75)
+
+    const slurps = stepsOf(game, 'pip').filter((s) => s.step === 'slurp')
+    // Worked from 90 -> 30 in 240s towards 20: 20 + 70 * 7^(-t/240).
+    expect(slurps[0]!.temperature).toBeCloseTo(61.325, 3)
+    expect(slurps[2]!.temperature).toBeCloseTo(58.107, 3)
+  })
+
+  // Mochi takes a step every 4 game seconds, so is skimmed by 48s, but waits for 50°C to slurp.
+  it('a patient NPC Cupper waits for the cups to cool to their slurp temperature', () => {
+    const game = seatedGame('mochi')
+
+    game.advanceClock(104)
+    expect(scheduleOf(game, 'mochi')).toHaveLength(12)
+    expect(scheduleOf(game, 'mochi').at(-1)).toBe('C skim @ 48')
+
+    game.advanceClock(20)
+    // 50°C is reached at 240 * log7(70 / 30) = 104.5s.
+    expect(scheduleOf(game, 'mochi').slice(12)).toEqual(['A slurp @ 104.5', 'B slurp @ 108.5', 'C slurp @ 112.5'])
+    expect(stepsOf(game, 'mochi')[12]!.temperature).toBeCloseTo(50, 6)
+  })
+
+  // Juniper takes a step every 6 game seconds and slurps at 65°C, then again at 40°C.
+  it('slurp every cup again at each cooler slurp temperature', () => {
+    const game = seatedGame('juniper')
+
+    game.advanceClock(200)
+
+    // 40°C is reached at 240 * log7(70 / 20) = 154.5s.
+    expect(scheduleOf(game, 'juniper').slice(12)).toEqual([
+      'A slurp @ 78',
+      'B slurp @ 84',
+      'C slurp @ 90',
+      'A slurp @ 154.5',
+      'B slurp @ 160.5',
+      'C slurp @ 166.5',
+    ])
+  })
+
+  it('keep their own schedules side by side', () => {
+    const game = seatedGame('pip', 'mochi')
+
+    game.advanceClock(12)
+
+    expect(scheduleOf(game, 'pip')).toEqual(['A dry-fragrance @ 5', 'B dry-fragrance @ 10'])
+    expect(scheduleOf(game, 'mochi')).toEqual(['A dry-fragrance @ 4', 'B dry-fragrance @ 8', 'C dry-fragrance @ 12'])
+  })
+
+  it('do not depend on how the same game time is split into steps', () => {
+    const oneStep = seatedGame('mochi')
+    oneStep.advanceClock(130)
+    const manySteps = seatedGame('mochi')
+    for (let i = 0; i < 130; i++) manySteps.advanceClock(1)
+
+    expect(stepsOf(manySteps, 'mochi')).toHaveLength(15)
+    expect(stepsOf(manySteps, 'mochi').map((s) => s.atSeconds)).toEqual(stepsOf(oneStep, 'mochi').map((s) => s.atSeconds))
+  })
+
+  it('cup apart from the Player, leaving the Player\'s cups and Cue Logs untouched', () => {
+    const game = seatedGame('pip')
+
+    game.advanceClock(120)
+
+    expect(game.getAttempt()!.cups.map((c) => [c.completedSteps, c.cues])).toEqual([
+      [[], []],
+      [[], []],
+      [[], []],
+    ])
+    expect(() => game.performStep('A', 'pour')).not.toThrow()
+  })
+})
+
 describe('Cup Temperature over game time', () => {
   it('falls monotonically from hot to the stone cold temperature over the tuned cooling time', () => {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     const readings: number[] = []
     for (let second = 0; second < 240; second += 30) {
@@ -58,7 +242,7 @@ describe('Cup Temperature over game time', () => {
 
   it('cools along a smooth curve towards room temperature (worked example: 120s of 240s)', () => {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     game.advanceClock(120)
 
@@ -68,7 +252,7 @@ describe('Cup Temperature over game time', () => {
 
   it('cools every Blind Cup together', () => {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     game.advanceClock(60)
 
@@ -78,8 +262,8 @@ describe('Cup Temperature over game time', () => {
   })
 
   it('follows the tuned cooling time rather than a fixed one', () => {
-    const game = newGame({ secondsToStoneCold: 300 })
-    game.startAttempt(SESSION)
+    const game = newGame({ cooling: { secondsToStoneCold: 300 } })
+    game.startAttempt(SESSION, [])
 
     game.advanceClock(300)
 
@@ -88,7 +272,7 @@ describe('Cup Temperature over game time', () => {
 
   it('reports the elapsed game time', () => {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     game.advanceClock(10)
     game.advanceClock(5)
@@ -101,7 +285,7 @@ describe('speed-up', () => {
   // Speed-up is the presentation passing larger steps: one real second at Nx is an N-second step.
   function temperatureAfterRealSeconds(realSeconds: number, speed: number) {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
     for (let second = 0; second < realSeconds; second++) game.advanceClock(1 * speed)
     return game.getAttempt()!.cups[0]!.temperature
   }
@@ -112,7 +296,7 @@ describe('speed-up', () => {
 
   it('does not depend on how the same game time is split into steps', () => {
     const oneStep = newGame()
-    oneStep.startAttempt(SESSION)
+    oneStep.startAttempt(SESSION, [])
     oneStep.advanceClock(90)
 
     expect(temperatureAfterRealSeconds(90, 1)).toBeCloseTo(oneStep.getAttempt()!.cups[0]!.temperature, 9)
@@ -125,8 +309,8 @@ describe('rejecting commands that break the rules', () => {
   })
 
   it('rejects starting an unknown Cupping Session', () => {
-    expect(() => newGame().startAttempt('nope')).toThrow(GameRuleError)
-    expect(() => newGame().startAttempt('nope')).toThrow(/unknown Cupping Session/i)
+    expect(() => newGame().startAttempt('nope', [])).toThrow(GameRuleError)
+    expect(() => newGame().startAttempt('nope', [])).toThrow(/unknown Cupping Session/i)
   })
 
   it('rejects advancing the clock when no Attempt is in progress', () => {
@@ -135,15 +319,15 @@ describe('rejecting commands that break the rules', () => {
 
   it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])('rejects advancing the clock by %s seconds', (seconds) => {
     const game = newGame()
-    game.startAttempt(SESSION)
+    game.startAttempt(SESSION, [])
 
     expect(() => game.advanceClock(seconds)).toThrow(GameRuleError)
   })
 
   it('rejects cooling tuning that cannot produce a cooling curve', () => {
-    expect(() => newGame({ stoneColdTemperature: 95 })).toThrow(/cooling/i)
-    expect(() => newGame({ ambientTemperature: 30 })).toThrow(/cooling/i)
-    expect(() => newGame({ secondsToStoneCold: 0 })).toThrow(/cooling/i)
+    expect(() => newGame({ cooling: { stoneColdTemperature: 95 } })).toThrow(/cooling/i)
+    expect(() => newGame({ cooling: { ambientTemperature: 30 } })).toThrow(/cooling/i)
+    expect(() => newGame({ cooling: { secondsToStoneCold: 0 } })).toThrow(/cooling/i)
   })
 })
 
@@ -459,8 +643,101 @@ describe('Calibration at the Reveal', () => {
     expect(reveal.stars).toBe(stars)
   })
 
+  it('leaves the Player\'s Calibration Points and Stars unaffected by NPC Score Cards', () => {
+    const game = newGame()
+    game.startAttempt(SESSION, ['pip', 'juniper'])
+    rateAll(game, {
+      A: { aroma: 4, flavor: 3, acidity: 4, body: 2, sweetness: 3 },
+      B: { aroma: 2, flavor: 5, acidity: 1, body: 5, sweetness: 4 },
+      C: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+    })
+
+    expect(game.submit()).toMatchObject({ calibrationPoints: 45, maxCalibrationPoints: 45, stars: 3 })
+  })
+
   it('sets Stars by share of the maximum, not by points alone: 22 of 45 is under half, 23 of 45 is over', () => {
     expect(revealWith(SESSION, 7, 1)).toMatchObject({ calibrationPoints: 22, maxCalibrationPoints: 45, stars: 0 })
     expect(revealWith(SESSION, 7, 2)).toMatchObject({ calibrationPoints: 23, maxCalibrationPoints: 45, stars: 1 })
+  })
+})
+
+describe('NPC Score Cards at the Reveal', () => {
+  const PLAYER_CARDS = {
+    A: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+    B: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+    C: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+  }
+
+  function revealWithLineup(lineup: string[], tuning: TestTuningOverrides = {}, seed = 1) {
+    const game = newGame(tuning, seed)
+    game.startAttempt(SESSION, lineup)
+    rateAll(game, PLAYER_CARDS)
+    return game.submit()
+  }
+
+  // Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4, C 3/3/3/3/3 (Aroma/Flavor/Acidity/Body/Sweetness).
+  // Pip: Acidity +2, Sweetness -1. Juniper: Aroma -3, Flavor +1.
+  it('shows every NPC Cupper\'s Score Card beside the Player\'s: the Reference Score shifted by their Personality Bias', () => {
+    const reveal = revealWithLineup(['pip', 'juniper'])
+
+    expect(reveal.cups.map((cup) => cup.npcScoreCards)).toEqual([
+      [
+        { id: 'pip', name: 'Pip', scoreCard: { aroma: 4, flavor: 3, acidity: 5, body: 2, sweetness: 2 } },
+        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 4, body: 2, sweetness: 3 } },
+      ],
+      [
+        { id: 'pip', name: 'Pip', scoreCard: { aroma: 2, flavor: 5, acidity: 3, body: 5, sweetness: 3 } },
+        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 5, acidity: 1, body: 5, sweetness: 4 } },
+      ],
+      [
+        { id: 'pip', name: 'Pip', scoreCard: { aroma: 3, flavor: 3, acidity: 5, body: 3, sweetness: 2 } },
+        { id: 'juniper', name: 'Juniper', scoreCard: { aroma: 1, flavor: 4, acidity: 3, body: 3, sweetness: 3 } },
+      ],
+    ])
+    expect(reveal.cups[0]!.scoreCard).toEqual(PLAYER_CARDS.A)
+  })
+
+  it('has no NPC Score Cards when every Seat was left empty', () => {
+    expect(revealWithLineup([]).cups.map((cup) => cup.npcScoreCards)).toEqual([[], [], []])
+  })
+
+  describe('with seeded noise', () => {
+    const NOISE = { npcScoreNoise: 1 }
+    const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1)
+    // Without noise: Pip and Juniper as above.
+    const NOISELESS = revealWithLineup(['pip', 'juniper'])
+
+    it('scatters each rating by at most the noise around Reference Score plus bias, always within 1–5 cups', () => {
+      for (const seed of SEEDS) {
+        const reveal = revealWithLineup(['pip', 'juniper'], NOISE, seed)
+        reveal.cups.forEach((cup, c) =>
+          cup.npcScoreCards.forEach((npcCard, n) => {
+            for (const attribute of ATTRIBUTES) {
+              const rating = npcCard.scoreCard[attribute]
+              expect([1, 2, 3, 4, 5]).toContain(rating)
+              expect(Math.abs(rating - NOISELESS.cups[c]!.npcScoreCards[n]!.scoreCard[attribute])).toBeLessThanOrEqual(1)
+            }
+          }),
+        )
+      }
+    })
+
+    it('varies with the seed, but repeats for the same seed', () => {
+      const cards = (seed: number) => revealWithLineup(['pip', 'juniper'], NOISE, seed).cups.map((cup) => cup.npcScoreCards)
+
+      expect(cards(7)).toEqual(cards(7))
+      expect(new Set(SEEDS.map((seed) => JSON.stringify(cards(seed)))).size).toBeGreaterThan(1)
+    })
+
+    it('stays centred on the bias: Pip\'s Cup C Acidity averages near 5, Sweetness near 2, Body near 3', () => {
+      const pipC = SEEDS.map((seed) => revealWithLineup(['pip'], NOISE, seed).cups[2]!.npcScoreCards[0]!.scoreCard)
+      const mean = (attribute: Attribute) => pipC.reduce((sum, card) => sum + card[attribute], 0) / pipC.length
+
+      expect(mean('acidity')).toBeGreaterThan(4.5)
+      expect(mean('sweetness')).toBeGreaterThan(1.5)
+      expect(mean('sweetness')).toBeLessThan(2.5)
+      expect(mean('body')).toBeGreaterThan(2.5)
+      expect(mean('body')).toBeLessThan(3.5)
+    })
   })
 })

@@ -1,5 +1,5 @@
 import { ATTRIBUTES } from './types'
-import type { Attribute, BlindCupContent, Rating, RevealResult, ScoreCard, StarCount } from './types'
+import type { Attribute, BlindCupContent, NpcScoreCard, Rating, RevealResult, ScoreCard, StarCount } from './types'
 
 export const ATTRIBUTE_NAMES: Record<Attribute, string> = {
   aroma: 'Aroma',
@@ -39,16 +39,19 @@ function starsFor(points: number, maxPoints: number): StarCount {
   return STAR_THRESHOLDS.find(({ percent }) => points * 100 >= maxPoints * percent)?.stars ?? 0
 }
 
-function mapAttributes<T>(fn: (attribute: Attribute) => T): Record<Attribute, T> {
+export function mapAttributes<T>(fn: (attribute: Attribute) => T): Record<Attribute, T> {
   return Object.fromEntries(ATTRIBUTES.map((attribute) => [attribute, fn(attribute)])) as Record<Attribute, T>
 }
 
-/** Scores each submitted Score Card against its Blind Cup's Reference Score. Every Score Card must be complete. */
+/**
+ * Scores each of the Player's submitted Score Cards against its Blind Cup's Reference Score.
+ * Every Score Card must be complete. NPC Score Cards are shown, not scored.
+ */
 export function revealAttempt(
   sessionId: string,
-  cups: readonly { content: BlindCupContent; scoreCard: ScoreCard }[],
+  cups: readonly { content: BlindCupContent; scoreCard: ScoreCard; npcScoreCards: NpcScoreCard[] }[],
 ): RevealResult {
-  const revealed = cups.map(({ content: cup, scoreCard: submitted }) => {
+  const revealed = cups.map(({ content: cup, scoreCard: submitted, npcScoreCards }) => {
     const scoreCard = mapAttributes((attribute) => submitted[attribute]!)
     return {
       letter: cup.letter,
@@ -57,6 +60,7 @@ export function revealAttempt(
       referenceScore: { ...cup.referenceScore },
       scoreCard,
       calibrationPoints: mapAttributes((attribute) => calibrationPoints(scoreCard[attribute], cup.referenceScore[attribute])),
+      npcScoreCards,
     }
   })
   const points = revealed.reduce(

@@ -2,7 +2,7 @@ import { GameRuleError } from './errors'
 import { ATTRIBUTES } from './types'
 import type { Attribute, BlindCupContent, CuppingStep, TastingCue } from './types'
 
-const STEP_NAMES: Record<CuppingStep, string> = {
+export const STEP_NAMES: Record<CuppingStep, string> = {
   'dry-fragrance': 'Dry Fragrance',
   pour: 'Pour',
   'break-the-crust': 'Break the Crust',
