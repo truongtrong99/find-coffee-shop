@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeTestContent } from '../content/testContent'
-import { createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
+import { ATTRIBUTES, createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
+import type { Attribute, Rating } from '.'
 
 const SESSION = 'lab-1-session-1'
 
@@ -10,6 +11,19 @@ function newGame(coolingOverrides = {}) {
     saveStore: createMemorySaveStore(),
     random: createSeededRandom(1),
   })
+}
+
+function startedGame(session = SESSION) {
+  const game = newGame()
+  game.startAttempt(session)
+  return game
+}
+
+/** Rates each listed Attribute on each listed cup's Score Card. */
+function rateAll(game: ReturnType<typeof newGame>, cards: Record<string, Partial<Record<Attribute, number>>>) {
+  for (const [letter, card] of Object.entries(cards)) {
+    for (const [attribute, rating] of Object.entries(card)) game.setRating(letter, attribute as Attribute, rating!)
+  }
 }
 
 describe('starting an Attempt', () => {
@@ -136,12 +150,6 @@ describe('rejecting commands that break the rules', () => {
 describe('Cupping Steps and Tasting Cues', () => {
   function cup(game: ReturnType<typeof newGame>, letter: string) {
     return game.getAttempt()!.cups.find((c) => c.letter === letter)!
-  }
-
-  function startedGame() {
-    const game = newGame()
-    game.startAttempt(SESSION)
-    return game
   }
 
   it('starts every Blind Cup with no Cupping Steps done and an empty Cue Log', () => {
@@ -274,5 +282,185 @@ describe('Cupping Steps and Tasting Cues', () => {
 
   it('rejects a Cupping Step when no Attempt is in progress', () => {
     expect(() => newGame().performStep('A', 'dry-fragrance')).toThrow(/no Attempt/i)
+  })
+})
+
+describe('Score Cards', () => {
+  function scoreCard(game: ReturnType<typeof newGame>, letter: string) {
+    return game.getAttempt()!.cups.find((c) => c.letter === letter)!.scoreCard
+  }
+
+  it('starts every Blind Cup with an empty Score Card', () => {
+    const game = startedGame()
+
+    expect(game.getAttempt()!.cups.map((c) => c.scoreCard)).toEqual([{}, {}, {}])
+  })
+
+  it('lets the Player rate Attributes on any cup in any order, and revise a rating', () => {
+    const game = startedGame()
+
+    game.setRating('C', 'body', 2)
+    game.setRating('A', 'acidity', 5)
+    game.setRating('C', 'aroma', 4)
+    game.setRating('A', 'acidity', 3)
+
+    expect(scoreCard(game, 'A')).toEqual({ acidity: 3 })
+    expect(scoreCard(game, 'B')).toEqual({})
+    expect(scoreCard(game, 'C')).toEqual({ body: 2, aroma: 4 })
+  })
+
+  it.each([0, 6, -1, 2.5, Number.NaN])('rejects a rating of %s, leaving the Score Card unchanged', (rating) => {
+    const game = startedGame()
+    game.setRating('A', 'flavor', 4)
+
+    expect(() => game.setRating('A', 'flavor', rating)).toThrow(GameRuleError)
+    expect(() => game.setRating('A', 'flavor', rating)).toThrow(/1.*5.*cups/)
+    expect(scoreCard(game, 'A')).toEqual({ flavor: 4 })
+  })
+
+  it('accepts every whole rating from 1 to 5 cups', () => {
+    const game = startedGame()
+
+    for (const rating of [1, 2, 3, 4, 5]) game.setRating('B', 'sweetness', rating)
+
+    expect(scoreCard(game, 'B')).toEqual({ sweetness: 5 })
+  })
+
+  it('rejects rating a cup letter that is not on the table', () => {
+    expect(() => startedGame().setRating('Z', 'aroma', 3)).toThrow(/no Cup Z/i)
+  })
+
+  it('rejects rating when no Attempt is in progress', () => {
+    expect(() => newGame().setRating('A', 'aroma', 3)).toThrow(/no Attempt/i)
+  })
+})
+
+describe('Submit', () => {
+  const PERFECT = {
+    A: { aroma: 4, flavor: 3, acidity: 4, body: 2, sweetness: 3 },
+    B: { aroma: 2, flavor: 5, acidity: 1, body: 5, sweetness: 4 },
+    C: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+  } as const
+
+  it('is unavailable until every Attribute on every Blind Cup is rated', () => {
+    const game = startedGame()
+    expect(game.getAttempt()!.canSubmit).toBe(false)
+
+    rateAll(game, { A: PERFECT.A, B: PERFECT.B, C: { aroma: 3, flavor: 3, acidity: 3, body: 3 } })
+    expect(game.getAttempt()!.canSubmit).toBe(false)
+    expect(game.getAttempt()!.cups.map((cup) => cup.scoreCardComplete)).toEqual([true, true, false])
+
+    game.setRating('C', 'sweetness', 1)
+    expect(game.getAttempt()!.canSubmit).toBe(true)
+    expect(game.getAttempt()!.cups.map((cup) => cup.scoreCardComplete)).toEqual([true, true, true])
+  })
+
+  it('is rejected with gaps, naming the unrated Attributes, and the Attempt carries on', () => {
+    const game = startedGame()
+    rateAll(game, { A: PERFECT.A, B: { aroma: 2, flavor: 5, acidity: 1, body: 5 }, C: { aroma: 3 } })
+
+    expect(() => game.submit()).toThrow(GameRuleError)
+    expect(() => game.submit()).toThrow(/Cup B: Sweetness.*Cup C: Flavor, Acidity, Body, Sweetness/)
+    expect(game.getAttempt()!.cups[0]!.scoreCard).toEqual(PERFECT.A)
+  })
+
+  it('is rejected when no Attempt is in progress', () => {
+    expect(() => newGame().submit()).toThrow(/no Attempt/i)
+  })
+
+  it('reveals each coffee\'s origin and story, its Reference Score and the Player\'s Score Card', () => {
+    const game = startedGame()
+    rateAll(game, { A: PERFECT.A, B: { ...PERFECT.B, body: 1 }, C: PERFECT.C })
+
+    const reveal = game.submit()
+
+    expect(reveal.cups.map(({ letter, origin, story, referenceScore, scoreCard }) => ({ letter, origin, story, referenceScore, scoreCard }))).toEqual([
+      { letter: 'A', origin: 'Origin A', story: 'Story of A', referenceScore: PERFECT.A, scoreCard: PERFECT.A },
+      { letter: 'B', origin: 'Origin B', story: 'Story of B', referenceScore: PERFECT.B, scoreCard: { ...PERFECT.B, body: 1 } },
+      { letter: 'C', origin: 'Origin C', story: 'Story of C', referenceScore: PERFECT.C, scoreCard: PERFECT.C },
+    ])
+  })
+
+  it('happens once: it ends the Attempt, so Score Cards can no longer change', () => {
+    const game = startedGame()
+    rateAll(game, PERFECT)
+
+    game.submit()
+
+    expect(game.getAttempt()).toBeUndefined()
+    expect(() => game.setRating('A', 'aroma', 1)).toThrow(/no Attempt/i)
+    expect(() => game.submit()).toThrow(/no Attempt/i)
+  })
+})
+
+describe('Calibration at the Reveal', () => {
+  function revealFor(cards: Record<string, Partial<Record<Attribute, number>>>, session = SESSION) {
+    const game = startedGame(session)
+    rateAll(game, cards)
+    return game.submit()
+  }
+
+  // Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4, C 3/3/3/3/3 (Aroma/Flavor/Acidity/Body/Sweetness).
+  it('earns 3 Calibration Points for an exact match, 1 for off by one either way, and 0 otherwise', () => {
+    const reveal = revealFor({
+      A: { aroma: 4, flavor: 4, acidity: 2, body: 1, sweetness: 5 },
+      B: { aroma: 2, flavor: 1, acidity: 4, body: 5, sweetness: 4 },
+      C: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+    })
+
+    expect(reveal.cups.map((cup) => cup.calibrationPoints)).toEqual([
+      { aroma: 3, flavor: 1, acidity: 0, body: 1, sweetness: 0 },
+      { aroma: 3, flavor: 0, acidity: 0, body: 3, sweetness: 3 },
+      { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 },
+    ])
+    expect(reveal.calibrationPoints).toBe(5 + 9 + 15)
+    expect(reveal.maxCalibrationPoints).toBe(45)
+  })
+
+  /**
+   * Rates a session so the Player earns exactly `exact` exact matches and `offByOne` near-misses,
+   * with every other Attribute off by two (0 points). Attributes are filled cup by cup in Score Card order.
+   */
+  function revealWith(session: string, exact: number, offByOne: number) {
+    const cups = makeTestContent().labs.flatMap((lab) => lab.sessions).find((s) => s.id === session)!.cups
+    let rated = 0
+    const cards = Object.fromEntries(
+      cups.map((cup) => [
+        cup.letter,
+        Object.fromEntries(
+          ATTRIBUTES.map((attribute) => {
+            const reference: Rating = cup.referenceScore[attribute]
+            const offBy = rated < exact ? 0 : rated < exact + offByOne ? 1 : 2
+            rated++
+            return [attribute, reference + offBy <= 5 ? reference + offBy : reference - offBy]
+          }),
+        ),
+      ]),
+    )
+    return revealFor(cards, session)
+  }
+
+  const FOUR_CUPS = 'lab-2-session-1' // 20 Attributes, 60 Calibration Points at most
+
+  it.each([
+    { exact: 0, offByOne: 0, points: 0, share: '0%', stars: 0 },
+    { exact: 9, offByOne: 2, points: 29, share: 'just under 50%', stars: 0 },
+    { exact: 10, offByOne: 0, points: 30, share: 'exactly 50%', stars: 1 },
+    { exact: 13, offByOne: 2, points: 41, share: 'just under 70%', stars: 1 },
+    { exact: 14, offByOne: 0, points: 42, share: 'exactly 70%', stars: 2 },
+    { exact: 17, offByOne: 2, points: 53, share: 'just under 90%', stars: 2 },
+    { exact: 18, offByOne: 0, points: 54, share: 'exactly 90%', stars: 3 },
+    { exact: 20, offByOne: 0, points: 60, share: '100%', stars: 3 },
+  ])('$points of 60 Calibration Points ($share) earns $stars Stars', ({ exact, offByOne, points, stars }) => {
+    const reveal = revealWith(FOUR_CUPS, exact, offByOne)
+
+    expect(reveal.calibrationPoints).toBe(points)
+    expect(reveal.maxCalibrationPoints).toBe(60)
+    expect(reveal.stars).toBe(stars)
+  })
+
+  it('sets Stars by share of the maximum, not by points alone: 22 of 45 is under half, 23 of 45 is over', () => {
+    expect(revealWith(SESSION, 7, 1)).toMatchObject({ calibrationPoints: 22, maxCalibrationPoints: 45, stars: 0 })
+    expect(revealWith(SESSION, 7, 2)).toMatchObject({ calibrationPoints: 23, maxCalibrationPoints: 45, stars: 1 })
   })
 })

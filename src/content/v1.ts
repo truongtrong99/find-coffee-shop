@@ -61,16 +61,25 @@ export const content: GameContent = {
           cups: [
             {
               letter: 'A',
+              origin: 'Yirgacheffe, Ethiopia',
+              story:
+                'Grown in tiny garden plots high in the hills of Gedeo and washed at a village station, where neighbours bring their cherries in on foot. Coffee was born in Ethiopia, and this cup still tastes of jasmine and lemon.',
               referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 2, sweetness: 4 },
               tastingNotes: houseTastingNotes,
             },
             {
               letter: 'B',
+              origin: 'Mandheling, Sumatra',
+              story:
+                'Picked by smallholders around Lake Toba and hulled while still wet, a local habit that gives the beans their deep green-blue colour and this heavy, earthy, low-acid cup.',
               referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 4, sweetness: 3 },
               tastingNotes: houseTastingNotes,
             },
             {
               letter: 'C',
+              origin: 'Tarrazú, Costa Rica',
+              story:
+                'A honey-processed coffee: the sticky fruit is left on the bean while it dries on raised beds under the mountain sun, soaking it with the sweetness you taste in the cup.',
               referenceScore: { aroma: 4, flavor: 4, acidity: 3, body: 3, sweetness: 5 },
               tastingNotes: houseTastingNotes,
             },

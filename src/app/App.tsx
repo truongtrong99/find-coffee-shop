@@ -1,7 +1,8 @@
 import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { firstSession } from '../content/v1'
-import type { Attribute, CuppingStep } from '../core'
+import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
+import type { CuppingStep, RevealedCup, StarCount } from '../core'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
 
@@ -14,13 +15,7 @@ const STEPS: { step: CuppingStep; label: string }[] = [
 ]
 const STEP_LABELS = Object.fromEntries(STEPS.map(({ step, label }) => [step, label])) as Record<CuppingStep, string>
 
-const ATTRIBUTE_LABELS: Record<Attribute, string> = {
-  aroma: 'Aroma',
-  flavor: 'Flavor',
-  acidity: 'Acidity',
-  body: 'Body',
-  sweetness: 'Sweetness',
-}
+const RATINGS = [1, 2, 3, 4, 5] as const
 
 function useGameLoop() {
   const tick = useGameStore((s) => s.tick)
@@ -63,8 +58,9 @@ function CuppingPanel() {
   const cups = useGameStore((s) => s.attempt.cups)
   const selectedLetter = useGameStore((s) => s.selectedLetter)
   const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
-  const stepRejection = useGameStore((s) => s.stepRejection)
-  const { selectCup, performStep, returnToDiorama } = useGameStore.getState()
+  const rejection = useGameStore((s) => s.rejection)
+  const canSubmit = useGameStore((s) => s.attempt.canSubmit)
+  const { selectCup, performStep, returnToDiorama, setRating, submit } = useGameStore.getState()
   const cup = cups.find((c) => c.letter === selectedLetter)!
   const logEnd = useRef<HTMLLIElement>(null)
 
@@ -78,6 +74,7 @@ function CuppingPanel() {
         {cups.map((c) => (
           <button key={c.letter} aria-pressed={c.letter === selectedLetter} onClick={() => selectCup(c.letter)}>
             Cup {c.letter}
+            {c.scoreCardComplete && <span aria-label="Score Card complete"> ✓</span>}
           </button>
         ))}
       </div>
@@ -95,9 +92,9 @@ function CuppingPanel() {
           )
         })}
       </div>
-      {stepRejection && (
+      {rejection && (
         <p className="rejection" role="alert">
-          {stepRejection}
+          {rejection}
         </p>
       )}
       {firstPersonLetter && (
@@ -114,14 +111,111 @@ function CuppingPanel() {
           {cup.cues.map((cue, i) => (
             <li key={i} ref={i === cup.cues.length - 1 ? logEnd : undefined}>
               <span className="cue-meta">
-                {STEP_LABELS[cue.step]} · {ATTRIBUTE_LABELS[cue.attribute]}
+                {STEP_LABELS[cue.step]} · {ATTRIBUTE_NAMES[cue.attribute]}
               </span>
               {cue.note}
             </li>
           ))}
         </ol>
       )}
+
+      <h3>Score Card · Cup {cup.letter}</h3>
+      <div className="score-card">
+        {ATTRIBUTES.map((attribute) => {
+          const rated = cup.scoreCard[attribute]
+          return (
+            <div key={attribute} className="rating-row" role="group" aria-label={ATTRIBUTE_NAMES[attribute]}>
+              <span>{ATTRIBUTE_NAMES[attribute]}</span>
+              {RATINGS.map((rating) => (
+                <button
+                  key={rating}
+                  aria-label={`${rating} cups`}
+                  aria-pressed={rating === rated}
+                  className={rated !== undefined && rating <= rated ? 'filled' : undefined}
+                  onClick={() => setRating(attribute, rating)}
+                >
+                  {rating}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+      <button className="submit" disabled={!canSubmit} onClick={submit}>
+        Submit
+      </button>
+      {!canSubmit && <p className="empty">Rate every Attribute on every cup to Submit.</p>}
     </aside>
+  )
+}
+
+function Stars({ count }: { count: StarCount }) {
+  return (
+    <div className="stars" aria-label={`${count} of 3 Stars`}>
+      {[1, 2, 3].map((n) => (
+        <span key={n} className={n <= count ? 'earned' : undefined}>
+          ★
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function RevealCard({ cup }: { cup: RevealedCup }) {
+  return (
+    <article className="reveal-cup">
+      <h3>
+        Cup {cup.letter} <span>{cup.origin}</span>
+      </h3>
+      <p>{cup.story}</p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Attribute</th>
+            <th scope="col">Reference</th>
+            <th scope="col">You</th>
+            <th scope="col">Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ATTRIBUTES.map((attribute) => (
+            <tr key={attribute}>
+              <th scope="row">{ATTRIBUTE_NAMES[attribute]}</th>
+              <td>{cup.referenceScore[attribute]}</td>
+              <td>{cup.scoreCard[attribute]}</td>
+              <td className={`points-${cup.calibrationPoints[attribute]}`}>+{cup.calibrationPoints[attribute]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </article>
+  )
+}
+
+function Reveal() {
+  const reveal = useGameStore((s) => s.reveal)
+  const cupAgain = useGameStore((s) => s.cupAgain)
+  if (!reveal) return null
+  return (
+    <div className="reveal-backdrop">
+      <section className="reveal" aria-label="Reveal">
+        <header>
+          <h2>The Reveal</h2>
+          <Stars count={reveal.stars} />
+          <p>
+            {reveal.calibrationPoints} of {reveal.maxCalibrationPoints} Calibration Points
+          </p>
+        </header>
+        <div className="reveal-cups">
+          {reveal.cups.map((cup) => (
+            <RevealCard key={cup.letter} cup={cup} />
+          ))}
+        </div>
+        <button className="again" onClick={cupAgain}>
+          Cup again
+        </button>
+      </section>
+    </div>
   )
 }
 
@@ -140,6 +234,7 @@ export function App() {
       <div ref={labelLayer} className="label-layer" />
       <Hud />
       <CuppingPanel />
+      <Reveal />
     </>
   )
 }

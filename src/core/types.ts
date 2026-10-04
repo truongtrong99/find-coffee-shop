@@ -20,11 +20,18 @@ export type Rating = 1 | 2 | 3 | 4 | 5
 /** The hand-authored expert rating of each Attribute for a coffee. */
 export type ReferenceScore = Record<Attribute, Rating>
 
+/** One Cupper's Attribute ratings for one Blind Cup; the Player's may have gaps until Submit. */
+export type ScoreCard = Partial<Record<Attribute, Rating>>
+
 /** Authored tasting-note text: one note per Attribute per rating, e.g. Acidity 4 → "bright, lemony". */
 export type TastingNotes = Record<Attribute, Record<Rating, string>>
 
 export interface BlindCupContent {
   letter: string
+  /** Where the coffee comes from, hidden until the Reveal. */
+  origin: string
+  /** A short story about the coffee, told at the Reveal. */
+  story: string
   referenceScore: ReferenceScore
   tastingNotes: TastingNotes
 }
@@ -64,6 +71,10 @@ export interface BlindCupState {
   completedSteps: CuppingStep[]
   /** The Cue Log: every Tasting Cue received about this cup, oldest first. */
   cues: TastingCue[]
+  /** The Player's Score Card for this cup, editable until Submit. */
+  scoreCard: ScoreCard
+  /** Whether every Attribute on this cup's Score Card is rated. */
+  scoreCardComplete: boolean
 }
 
 export interface AttemptState {
@@ -71,4 +82,33 @@ export interface AttemptState {
   /** Game seconds since the Attempt started. */
   elapsedSeconds: number
   cups: BlindCupState[]
+  /** Whether every Attribute on every Blind Cup is rated, so the Player may Submit. */
+  canSubmit: boolean
+}
+
+/** Stars earned for Calibration in an Attempt; 0 below half the maximum Calibration Points. */
+export type StarCount = 0 | 1 | 2 | 3
+
+/** One Blind Cup at the Reveal, its origin no longer hidden. */
+export interface RevealedCup {
+  letter: string
+  origin: string
+  story: string
+  referenceScore: ReferenceScore
+  /** The Player's submitted Score Card, every Attribute rated. */
+  scoreCard: Record<Attribute, Rating>
+  /** Calibration Points earned per Attribute against the Reference Score. */
+  calibrationPoints: Record<Attribute, number>
+}
+
+/** The end of an Attempt: what the Player sees at the Reveal. */
+export interface RevealResult {
+  sessionId: string
+  cups: RevealedCup[]
+  /** Calibration Points earned across every Blind Cup. */
+  calibrationPoints: number
+  /** Calibration Points for a perfect Calibration: an exact match on every Attribute of every cup. */
+  maxCalibrationPoints: number
+  /** Stars earned for this Attempt: 1 at 50% of the maximum Calibration Points, 2 at 70%, 3 at 90%. */
+  stars: StarCount
 }
