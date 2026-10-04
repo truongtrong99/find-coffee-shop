@@ -1,4 +1,43 @@
-import type { GameContent } from '../core'
+import type { GameContent, TastingNotes } from '../core'
+
+/** House tasting-note text shared by the v1 coffees; a coffee can author its own instead. */
+const houseTastingNotes: TastingNotes = {
+  aroma: {
+    1: 'barely there, a little papery',
+    2: 'faint, toasty grain',
+    3: 'pleasant, nutty and warm',
+    4: 'fragrant, florals and brown sugar',
+    5: 'a burst of jasmine and ripe fruit',
+  },
+  flavor: {
+    1: 'hollow and woody',
+    2: 'muted, a touch of cardboard',
+    3: 'clean, cocoa and almond',
+    4: 'juicy stone fruit and caramel',
+    5: 'layered berries, long and vivid',
+  },
+  acidity: {
+    1: 'flat, no sparkle at all',
+    2: 'soft and mellow',
+    3: 'gentle, like a red apple',
+    4: 'bright, lemony',
+    5: 'sparkling, like blackcurrant soda',
+  },
+  body: {
+    1: 'thin and watery',
+    2: 'light, a little tea-like',
+    3: 'round and smooth',
+    4: 'creamy, coats the tongue',
+    5: 'syrupy and heavy',
+  },
+  sweetness: {
+    1: 'harsh and bitter',
+    2: 'dry, barely sweet',
+    3: 'mild caramel',
+    4: 'honeyed',
+    5: 'candied, like ripe mango',
+  },
+}
 
 /** Walking-skeleton content: one Lab with one hard-coded Cupping Session of 3 Blind Cups. */
 export const content: GameContent = {
@@ -19,7 +58,23 @@ export const content: GameContent = {
         {
           id: 'lab-1-session-1',
           name: 'First Cupping',
-          cups: [{ letter: 'A' }, { letter: 'B' }, { letter: 'C' }],
+          cups: [
+            {
+              letter: 'A',
+              referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 2, sweetness: 4 },
+              tastingNotes: houseTastingNotes,
+            },
+            {
+              letter: 'B',
+              referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 4, sweetness: 3 },
+              tastingNotes: houseTastingNotes,
+            },
+            {
+              letter: 'C',
+              referenceScore: { aroma: 4, flavor: 4, acidity: 3, body: 3, sweetness: 5 },
+              tastingNotes: houseTastingNotes,
+            },
+          ],
         },
       ],
     },

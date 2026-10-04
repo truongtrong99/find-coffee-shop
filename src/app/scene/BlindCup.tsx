@@ -12,6 +12,9 @@ interface BlindCupProps {
   letter: string
   temperature: number
   position: [number, number, number]
+  selected: boolean
+  showLabel: boolean
+  onSelect(): void
   /** Stable DOM layer for labels; without it drei's Html can lose a label when its default target changes on mount. */
   labelLayer: RefObject<HTMLDivElement | null>
 }
@@ -37,9 +40,23 @@ function Thermometer({ temperature }: { temperature: number }) {
   )
 }
 
-export function BlindCup({ letter, temperature, position, labelLayer }: BlindCupProps) {
+export function BlindCup({ letter, temperature, position, selected, showLabel, onSelect, labelLayer }: BlindCupProps) {
   return (
-    <group position={position}>
+    <group
+      position={position}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelect()
+      }}
+      onPointerOver={() => (document.body.style.cursor = 'pointer')}
+      onPointerOut={() => (document.body.style.cursor = '')}
+    >
+      {selected && (
+        <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.5, 0.62, 48]} />
+          <meshStandardMaterial color="#e07a5f" />
+        </mesh>
+      )}
       <mesh position={[0, 0.25, 0]} castShadow>
         <cylinderGeometry args={[0.45, 0.35, 0.5, 32]} />
         <meshStandardMaterial color="#fffaf0" />
@@ -49,12 +66,14 @@ export function BlindCup({ letter, temperature, position, labelLayer }: BlindCup
         <meshStandardMaterial color="#4b2c1a" />
       </mesh>
       <Thermometer temperature={temperature} />
-      <Html position={[0, 1.2, 0]} center zIndexRange={[10, 0]} portal={labelLayer as RefObject<HTMLElement>}>
-        <div className="cup-label">
-          Cup {letter}
-          <small>{Math.round(temperature)}°C</small>
-        </div>
-      </Html>
+      {showLabel && (
+        <Html position={[0, 1.2, 0]} center zIndexRange={[10, 0]} portal={labelLayer as RefObject<HTMLElement>}>
+          <div className={selected ? 'cup-label selected' : 'cup-label'}>
+            Cup {letter}
+            <small>{Math.round(temperature)}°C</small>
+          </div>
+        </Html>
+      )}
     </group>
   )
 }

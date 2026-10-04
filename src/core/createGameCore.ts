@@ -1,7 +1,8 @@
 import { createCoolingCurve } from './cooling'
+import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
 import type { RandomSource, SaveStore } from './ports'
-import type { AttemptState, GameContent } from './types'
+import type { AttemptState, BlindCupContent, CuppingStep, GameContent } from './types'
 
 export interface GameCoreDeps {
   content: GameContent
@@ -17,6 +18,8 @@ export interface GameCore {
    * time: speed-up is the caller passing larger steps.
    */
   advanceClock(seconds: number): void
+  /** Performs a Cupping Step on the Blind Cup with this letter, adding its Tasting Cues to the cup's cue log. */
+  performStep(cupLetter: string, step: CuppingStep): void
   /** The current Attempt, or undefined when none is in progress. A fresh snapshot each call. */
   getAttempt(): AttemptState | undefined
 }
@@ -24,17 +27,21 @@ export interface GameCore {
 export function createGameCore({ content }: GameCoreDeps): GameCore {
   const temperatureAt = createCoolingCurve(content.tuning.cooling)
   let attempt: AttemptState | undefined
+  let cupContents: BlindCupContent[] = []
 
   return {
     startAttempt(sessionId) {
       const session = content.labs.flatMap((lab) => lab.sessions).find((s) => s.id === sessionId)
       if (!session) throw new GameRuleError(`Unknown Cupping Session "${sessionId}"`)
+      cupContents = session.cups
       attempt = {
         sessionId,
         elapsedSeconds: 0,
         cups: session.cups.map((cup) => ({
           letter: cup.letter,
           temperature: temperatureAt(0),
+          completedSteps: [],
+          cues: [],
         })),
       }
     },
@@ -50,8 +57,30 @@ export function createGameCore({ content }: GameCoreDeps): GameCore {
         cups: attempt.cups.map((cup) => ({ ...cup, temperature: temperatureAt(elapsedSeconds) })),
       }
     },
+    performStep(cupLetter, step) {
+      if (!attempt) throw new GameRuleError('No Attempt in progress to perform a Cupping Step in')
+      const index = cupContents.findIndex((cup) => cup.letter === cupLetter)
+      if (index === -1) throw new GameRuleError(`There is no Cup ${cupLetter} on the table`)
+      const cup = attempt.cups[index]!
+      assertStepAllowed(cupLetter, cup.completedSteps, step)
+      const cupped = {
+        ...cup,
+        completedSteps: [...cup.completedSteps, step],
+        cues: [...cup.cues, ...cuesForStep(cupContents[index]!, step)],
+      }
+      attempt = { ...attempt, cups: attempt.cups.map((c, i) => (i === index ? cupped : c)) }
+    },
     getAttempt() {
-      return attempt && { ...attempt, cups: attempt.cups.map((cup) => ({ ...cup })) }
+      return (
+        attempt && {
+          ...attempt,
+          cups: attempt.cups.map((cup) => ({
+            ...cup,
+            completedSteps: [...cup.completedSteps],
+            cues: cup.cues.map((cue) => ({ ...cue })),
+          })),
+        }
+      )
     },
   }
 }

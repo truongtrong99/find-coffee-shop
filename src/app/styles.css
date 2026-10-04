@@ -72,3 +72,130 @@ body,
   font-weight: 600;
   text-align: center;
 }
+
+.cup-label.selected {
+  background: #e07a5f;
+  color: #fff;
+}
+
+.panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  width: min(340px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: rgba(255, 250, 240, 0.94);
+  color: #4a3222;
+  box-shadow: 0 4px 12px rgba(74, 50, 34, 0.2);
+}
+
+.panel h2,
+.panel h3 {
+  margin: 0;
+}
+
+.panel h2 small {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.panel h3 {
+  font-size: 15px;
+}
+
+.panel button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 2px solid #4a3222;
+  border-radius: 12px;
+  background: #fff;
+  color: #4a3222;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel button[aria-pressed='true'] {
+  background: #4a3222;
+  color: #fff;
+}
+
+.panel .cup-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.panel .cup-picker button {
+  flex: 1;
+}
+
+.panel .steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.panel .steps button:last-child {
+  grid-column: span 2;
+  background: #e07a5f;
+  border-color: #e07a5f;
+  color: #fff;
+}
+
+.panel .steps button.done {
+  border-style: dashed;
+  color: #8a6a52;
+}
+
+.panel .back {
+  background: #f6e7cf;
+}
+
+.panel .rejection {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fde2dc;
+  color: #8a2a17;
+  font-size: 14px;
+}
+
+.panel .empty {
+  margin: 0;
+  font-size: 14px;
+  color: #8a6a52;
+}
+
+.cue-log {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cue-log li {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.cue-log .cue-meta {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #a0785a;
+}
