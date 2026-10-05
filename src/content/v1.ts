@@ -168,7 +168,7 @@ export const content: GameContent = {
       name: 'The Competition Lab',
       starsToUnlock: 18,
       seats: 4,
-      sessions: placeholderSessions('lab-3', ['Five Flights', "Judges' Table", 'Blind Finals', 'Grand Finale'], [yirgacheffe, mandheling, tarrazu, huila, nyeri]),
+      sessions: placeholderSessions('lab-3', ['Five Flights', "Cuppers' Table", 'Blind Finals', 'Grand Finale'], [yirgacheffe, mandheling, tarrazu, huila, nyeri]),
     },
   ],
 }

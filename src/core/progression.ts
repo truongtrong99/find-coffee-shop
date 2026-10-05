@@ -24,9 +24,24 @@ export function labMap(labs: readonly LabContent[], best: BestStars): LabMap {
   }
 }
 
-/** The best Stars after an Attempt of a Cupping Session earned `stars`. */
-export function recordStars(best: BestStars, sessionId: string, stars: StarCount): BestStars {
-  return { ...best, [sessionId]: Math.max(best[sessionId] ?? 0, stars) as StarCount }
+/** What an Attempt that earned `stars` changes in progression. */
+export interface RecordedAttempt {
+  best: BestStars
+  /** Whether the Stars beat every earlier Attempt of the Cupping Session. */
+  newBest: boolean
+  /** The Labs locked before the Attempt and unlocked after it, in content order. */
+  unlockedLabs: LabContent[]
+}
+
+/** Keeps the Stars as the Cupping Session's best if they beat it, and finds the Labs that unlocks. */
+export function recordAttempt(labs: readonly LabContent[], best: BestStars, sessionId: string, stars: StarCount): RecordedAttempt {
+  const newBest = stars > (best[sessionId] ?? 0)
+  const after = newBest ? { ...best, [sessionId]: stars } : best
+  return {
+    best: after,
+    newBest,
+    unlockedLabs: labs.filter((lab) => !isLabUnlocked(lab, best) && isLabUnlocked(lab, after)),
+  }
 }
 
 const SAVE_VERSION = 1

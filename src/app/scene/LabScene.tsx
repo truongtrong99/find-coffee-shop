@@ -116,7 +116,7 @@ function useSeatedNpcs(): SeatedNpc[] {
   const npcCuppers = useGameStore((s) => s.attempt?.npcCuppers)
   const lineup = useGameStore((s) => s.lineup)
   const lineupFits = useGameStore((s) => s.lineupRejection === null)
-  const options = useGameStore((s) => s.lineupOptions)
+  const options = useGameStore((s) => s.session?.lineupOptions)
   if (npcCuppers) return npcCuppers.map(({ id, name, steps }) => ({ id, name, latestStep: steps.at(-1) }))
   if (!lineupFits || !options) return []
   return lineup.map((id) => ({ id, name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id, latestStep: undefined }))
@@ -126,7 +126,7 @@ function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivE
   const seated = useSeatedNpcs()
   const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
   const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
-  const options = useGameStore((s) => s.lineupOptions)
+  const options = useGameStore((s) => s.session?.lineupOptions)
   return seated.map(({ id, name, latestStep }, seat) => {
     const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
     const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1

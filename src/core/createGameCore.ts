@@ -4,7 +4,7 @@ import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
 import { isUnlocked, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
-import { isLabUnlocked, labMap, loadProgress, recordStars, serializeProgress, totalStars } from './progression'
+import { isLabUnlocked, labMap, loadProgress, recordAttempt, serializeProgress, totalStars } from './progression'
 import type { BestStars } from './progression'
 import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
 import type {
@@ -209,10 +209,14 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         })),
       )
       attempt = undefined
-      const previousBest = bestStars[scored.sessionId] ?? 0
-      bestStars = recordStars(bestStars, scored.sessionId, scored.stars)
+      const recorded = recordAttempt(content.labs, bestStars, scored.sessionId, scored.stars)
+      bestStars = recorded.best
       saveStore.save(serializeProgress(bestStars))
-      return { ...scored, newBest: scored.stars > previousBest }
+      return {
+        ...scored,
+        newBest: recorded.newBest,
+        unlockedLabs: recorded.unlockedLabs.map(({ id, name }) => ({ id, name })),
+      }
     },
     leaveLab() {
       attempt = undefined

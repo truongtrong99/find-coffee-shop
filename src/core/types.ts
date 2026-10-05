@@ -217,6 +217,8 @@ export interface RevealResult {
   stars: StarCount
   /** Whether this Attempt earned more Stars than any before it in this Cupping Session, so they are the new best. */
   newBest: boolean
+  /** The Labs this Attempt's Stars unlocked, in content order; empty when none. */
+  unlockedLabs: { id: string; name: string }[]
 }
 
 /** A Cupping Session on the Lab Map. */

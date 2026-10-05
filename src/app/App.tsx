@@ -2,10 +2,11 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { content } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { AttemptState, BlindCupState, CuppingStep, LabMap, RevealedCup, StarCount } from '../core'
+import type { AttemptState, BlindCupState, CuppingStep, LineupOptions, RevealedCup, StarCount } from '../core'
 import { ATTRIBUTE_ICONS, WINDOW_LABELS } from './cueDisplay'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
+import type { OpenedSession } from './store'
 
 const STEPS: { step: CuppingStep; label: string }[] = [
   { step: 'dry-fragrance', label: 'Dry Fragrance' },
@@ -45,18 +46,15 @@ function formatClock(seconds: number) {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
 }
 
-function sessionName(labMap: LabMap, sessionId: string) {
-  return labMap.labs.flatMap((lab) => lab.sessions).find((session) => session.id === sessionId)?.name ?? sessionId
-}
-
-function Hud({ sessionId }: { sessionId: string }) {
+function Hud({ session }: { session: OpenedSession }) {
   const speed = useGameStore((s) => s.speed)
-  const name = useGameStore((s) => sessionName(s.labMap, sessionId))
   const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
+  // The Lineup and the Reveal have their own Leave Lab; this one is for leaving mid-Attempt.
+  const cupping = useGameStore((s) => s.attempt !== null && s.reveal === null)
   const { setSpeed, leaveLab } = useGameStore.getState()
   return (
     <div className="hud">
-      <h1>{name}</h1>
+      <h1>{session.name}</h1>
       <div>Game clock {formatClock(elapsed)}</div>
       <div className="speed" role="group" aria-label="Game speed">
         {SPEEDS.map((s) => (
@@ -65,7 +63,7 @@ function Hud({ sessionId }: { sessionId: string }) {
           </button>
         ))}
       </div>
-      <button onClick={leaveLab}>Leave Lab</button>
+      {cupping && <button onClick={leaveLab}>Leave Lab</button>}
     </div>
   )
 }
@@ -90,7 +88,7 @@ function LabMapScreen() {
             </h3>
             <div className="lab-sessions">
               {lab.sessions.map((session) => (
-                <button key={session.id} disabled={!lab.unlocked} onClick={() => openSession(session.id)}>
+                <button key={session.id} disabled={!lab.unlocked} onClick={() => openSession(session)}>
                   {session.name}
                   <Stars count={session.bestStars} />
                 </button>
@@ -124,8 +122,7 @@ function LeaveConfirmation() {
   )
 }
 
-function LineupScreen() {
-  const { seats, npcCuppers } = useGameStore((s) => s.lineupOptions)!
+function LineupScreen({ lineupOptions: { seats, npcCuppers } }: { lineupOptions: LineupOptions }) {
   const lineup = useGameStore((s) => s.lineup)
   const lineupRejection = useGameStore((s) => s.lineupRejection)
   const rejection = useGameStore((s) => s.rejection)
@@ -367,6 +364,11 @@ function Reveal() {
           <h2>The Reveal</h2>
           <Stars count={reveal.stars} />
           {reveal.newBest && <p className="new-best">New best!</p>}
+          {reveal.unlockedLabs.map((lab) => (
+            <p key={lab.id} className="new-best">
+              🔓 {lab.name} unlocked!
+            </p>
+          ))}
           <p>
             {reveal.calibrationPoints} of {reveal.maxCalibrationPoints} Calibration Points
           </p>
@@ -392,7 +394,7 @@ function Reveal() {
 export function App() {
   useGameLoop()
   const labelLayer = useRef<HTMLDivElement>(null)
-  const sessionId = useGameStore((s) => s.sessionId)
+  const session = useGameStore((s) => s.session)
   const choosingLineup = useGameStore((s) => s.attempt === null)
   const confirmingLeave = useGameStore((s) => s.confirmingLeave)
   return (
@@ -405,12 +407,12 @@ export function App() {
         <LabScene labelLayer={labelLayer} />
       </Canvas>
       <div ref={labelLayer} className="label-layer" />
-      {sessionId === null ? (
+      {session === null ? (
         <LabMapScreen />
       ) : (
         <>
-          <Hud sessionId={sessionId} />
-          {choosingLineup ? <LineupScreen /> : <CuppingPanel />}
+          <Hud session={session} />
+          {choosingLineup ? <LineupScreen lineupOptions={session.lineupOptions} /> : <CuppingPanel />}
           <Reveal />
           {confirmingLeave && <LeaveConfirmation />}
         </>

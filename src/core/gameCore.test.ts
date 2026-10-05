@@ -1077,6 +1077,16 @@ describe('unlocking Labs with total Stars', () => {
     expect(unlocked(game)).toEqual([true, true, true])
   })
 
+  it('the Reveal announces the Labs its Stars unlocked, once', () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-1', 3)
+    playFor(game, 'lab-1-session-2', 3)
+
+    expect(playFor(game, 'lab-1-session-3', 1).unlockedLabs).toEqual([])
+    expect(playFor(game, 'lab-1-session-3', 2).unlockedLabs).toEqual([{ id: 'lab-2', name: 'Test Lab 2' }])
+    expect(playFor(game, 'lab-1-session-3', 3).unlockedLabs).toEqual([])
+  })
+
   it('rejects starting an Attempt in a locked Lab, naming the Stars it needs', () => {
     const game = newGame()
     playFor(game, 'lab-1-session-1', 3)
