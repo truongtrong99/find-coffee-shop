@@ -246,17 +246,157 @@ describe('NPC Cuppers cupping on their own schedules', () => {
     expect(stepsOf(manySteps, 'mochi').map((s) => s.atSeconds)).toEqual(stepsOf(oneStep, 'mochi').map((s) => s.atSeconds))
   })
 
-  it('cup apart from the Player, leaving the Player\'s cups and Cue Logs untouched', () => {
+  it('cup apart from the Player, leaving the Player\'s Cupping Steps untouched and only remarking in the Cue Logs', () => {
     const game = seatedGame('pip')
 
     game.advanceClock(120)
 
-    expect(game.getAttempt()!.cups.map((c) => [c.completedSteps, c.cues])).toEqual([
-      [[], []],
-      [[], []],
-      [[], []],
-    ])
+    expect(game.getAttempt()!.cups.map((c) => c.completedSteps)).toEqual([[], [], []])
+    expect(game.getAttempt()!.cups.map((c) => c.cues.map((cue) => cue.remarkBy?.id))).toEqual([['pip'], ['pip'], ['pip']])
     expect(() => game.performStep('A', 'pour')).not.toThrow()
+  })
+})
+
+describe('NPC remarks as Tasting Cues', () => {
+  // Pip slurps Cups A, B and C at 65s, 70s and 75s (61.3°C to 58.1°C); Pip's Personality Bias is Acidity +2,
+  // Sweetness -1. Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4, C 3/3/3/3/3 (Aroma/Flavor/Acidity/Body/Sweetness).
+  const PIP = { id: 'pip', name: 'Pip' }
+
+  function seatedGame(lineup: string[], tuning: TestTuningOverrides = {}, seed = 1) {
+    const game = newGame(tuning, seed)
+    game.startAttempt(SESSION, lineup)
+    return game
+  }
+
+  it("after each of their Slurps, an NPC Cupper remarks on the cup, in its Cue Log and attributed to them", () => {
+    const game = seatedGame(['pip'])
+
+    game.advanceClock(64.9)
+    expect(game.getAttempt()!.cups.map((c) => c.cues)).toEqual([[], [], []])
+
+    game.advanceClock(10.1)
+
+    const slurps = game.getAttempt()!.npcCuppers[0]!.steps.filter((s) => s.step === 'slurp')
+    for (const [i, letter] of ['A', 'B', 'C'].entries()) {
+      const cues = cup(game, letter).cues
+      expect(cues).toHaveLength(1)
+      expect(cues[0]).toMatchObject({ step: 'slurp', remarkBy: PIP, temperature: slurps[i]!.temperature })
+      expect(slurps[i]!.remark).toEqual(cues[0])
+    }
+    expect(cup(game, 'A').cues[0]!.temperature).toBeCloseTo(61.325, 3)
+  })
+
+  it('makes no remark after any Cupping Step but a Slurp', () => {
+    const game = seatedGame(['pip'])
+
+    game.advanceClock(60)
+
+    expect(game.getAttempt()!.npcCuppers[0]!.steps.map((s) => s.remark)).toEqual(Array(12).fill(undefined))
+  })
+
+  it("logs remarks and the Player's own cues oldest first, the Player's own attributed to no one", () => {
+    const game = seatedGame(['pip'])
+    for (const step of ['pour', 'break-the-crust', 'skim'] as const) game.performStep('A', step)
+    game.advanceClock(65)
+
+    game.performStep('A', 'slurp')
+
+    const cues = cup(game, 'A').cues
+    expect(cues.map((cue) => cue.remarkBy)).toEqual([undefined, PIP, undefined, undefined, undefined, undefined, undefined])
+  })
+
+  const SEEDS = Array.from({ length: 30 }, (_, i) => i + 1)
+  const EVERY_WINDOW = (window: { min: number; max: number }) =>
+    Object.fromEntries(ATTRIBUTES.map((attribute) => [attribute, window])) as Record<Attribute, typeof window>
+
+  /** Every remark Pip makes across the seeds, after slurping each cup once at 61°C to 58°C. */
+  function pipRemarks(tuning: TestTuningOverrides) {
+    return SEEDS.flatMap((seed) => {
+      const game = seatedGame(['pip'], tuning, seed)
+      game.advanceClock(75)
+      return game.getAttempt()!.cups.map((c) => ({ letter: c.letter, ...c.cues[0]! }))
+    })
+  }
+
+  it('remarks on an Attribute picked by the seeded random source, so the same seed repeats', () => {
+    const remarks = pipRemarks({})
+
+    expect(new Set(remarks.map((remark) => remark.attribute))).toEqual(new Set(ATTRIBUTES))
+    const again = seatedGame(['pip'], {}, 7)
+    again.advanceClock(75)
+    expect(again.getAttempt()!.cups.map((c) => c.cues)).toEqual(remarks.slice(18, 21).map(({ letter, ...cue }) => [cue]))
+  })
+
+  it('a remark inside the Accuracy Window is the Reference Score shifted by their Personality Bias, within 1–5 cups', () => {
+    // Every window spans 30–90°C, so all of Pip's Slurps are inside. Acidity +2, Sweetness -1, the rest unbiased.
+    const expected: Record<string, Record<Attribute, Rating>> = {
+      A: { aroma: 4, flavor: 3, acidity: 5, body: 2, sweetness: 2 },
+      B: { aroma: 2, flavor: 5, acidity: 3, body: 5, sweetness: 3 },
+      C: { aroma: 3, flavor: 3, acidity: 5, body: 3, sweetness: 2 },
+    }
+
+    for (const remark of pipRemarks({ accuracyWindows: EVERY_WINDOW({ min: 30, max: 90 }) })) {
+      const rating = expected[remark.letter]![remark.attribute]
+      expect(remark).toMatchObject({ window: 'inside', suggestedRating: rating, note: expect.stringMatching(`^${remark.attribute} ${rating}:`) })
+    }
+  })
+
+  // Every window spans 35–40°C, so all of Pip's Slurps at 61°C to 58°C are too hot.
+  const TOO_HOT = { accuracyWindows: EVERY_WINDOW({ min: 35, max: 40 }) }
+
+  it('a remark made too hot can be vague, and a vague remark stays vague whatever their Personality Bias', () => {
+    for (const remark of pipRemarks({ ...TOO_HOT, skewedCueChance: 0 })) {
+      expect(remark).toMatchObject({ window: 'too-hot', suggestedRating: undefined, note: `${remark.attribute} ?: hard to make out` })
+    }
+  })
+
+  it('a remark made too hot can be skewed one cup off the Reference Score, then shifted by their Personality Bias', () => {
+    // One cup either way from Reference Score, then Acidity +2 and Sweetness -1, kept within 1–5 cups.
+    const possible: Record<string, Record<Attribute, Rating[]>> = {
+      A: { aroma: [3, 5], flavor: [2, 4], acidity: [5], body: [1, 3], sweetness: [1, 3] },
+      B: { aroma: [1, 3], flavor: [4], acidity: [4], body: [4], sweetness: [2, 4] },
+      C: { aroma: [2, 4], flavor: [2, 4], acidity: [4, 5], body: [2, 4], sweetness: [1, 3] },
+    }
+
+    const remarks = pipRemarks({ ...TOO_HOT, skewedCueChance: 1 })
+
+    for (const remark of remarks) {
+      expect(remark.window).toBe('too-hot')
+      expect(possible[remark.letter]![remark.attribute]).toContain(remark.suggestedRating)
+      expect(remark.note).toMatch(new RegExp(`^${remark.attribute} ${remark.suggestedRating}:`))
+    }
+    // Cup B's Acidity 1 can only be skewed up to 2, which Pip says is 4: never the Reference Score.
+    expect(remarks.filter((r) => r.letter === 'B' && r.attribute === 'acidity').length).toBeGreaterThan(0)
+  })
+
+  it('a remark from a stone-cold cup is vague, whatever their Personality Bias', () => {
+    // Juniper slurps at 65°C, then again at 40°C: stone cold once the stone cold temperature is 45°C.
+    const game = seatedGame(['juniper'], { cooling: { stoneColdTemperature: 45 }, skewedCueChance: 1 })
+
+    game.advanceClock(400)
+
+    const remarks = game.getAttempt()!.cups.flatMap((c) => c.cues)
+    expect(remarks).toHaveLength(6)
+    for (const remark of remarks.filter((r) => r.temperature <= 45)) {
+      expect(remark).toMatchObject({ window: 'stone-cold', suggestedRating: undefined, remarkBy: { id: 'juniper', name: 'Juniper' } })
+    }
+    expect(remarks.filter((r) => r.window === 'stone-cold')).toHaveLength(3)
+  })
+
+  it('do not depend on how the same game time is split into steps', () => {
+    const oneStep = seatedGame(['pip', 'mochi'])
+    oneStep.advanceClock(130)
+    const manySteps = seatedGame(['pip', 'mochi'])
+    for (let i = 0; i < 130; i++) manySteps.advanceClock(1)
+
+    const cueLogs = (game: ReturnType<typeof newGame>) => game.getAttempt()!.cups.map((c) => c.cues)
+    expect(cueLogs(manySteps)).toEqual(cueLogs(oneStep))
+    // Pip remarks at 65–75s, Mochi at 104.5–112.5s, so each Cue Log is Pip's remark then Mochi's.
+    expect(cueLogs(oneStep).map((log) => log.map((cue) => cue.remarkBy!.id))).toEqual([
+      ['pip', 'mochi'],
+      ['pip', 'mochi'],
+      ['pip', 'mochi'],
+    ])
   })
 })
 
@@ -1622,6 +1762,22 @@ describe('Tutorial Prompts', () => {
       game.advanceClock(110)
 
       expect(prompt(game)).toEqual({ kind: 'accuracy-windows', cupLetter: 'A', slurpNow: ['flavor', 'acidity', 'sweetness'], waitFor: [] })
+    })
+
+    it("count only the Player's own Slurps as tasting a window, not an NPC Cupper's remark", () => {
+      // Pip's remarks at 65–75s (61°C to 58°C) fall inside Flavor's and Body's windows, but the Player hasn't slurped since 90°C.
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const game = newGame({}, seed)
+        game.startAttempt('lab-1-tutorial', ['mochi', 'pip'])
+        for (const letter of ['A', 'B', 'C']) {
+          for (const step of ['pour', 'break-the-crust', 'skim', 'slurp'] as const) game.performStep(letter, step)
+        }
+
+        // 80s in, at 57.5°C: inside Flavor's, Body's and Sweetness's windows, still above Acidity's.
+        game.advanceClock(80)
+
+        expect(prompt(game)).toEqual({ kind: 'accuracy-windows', cupLetter: 'A', slurpNow: ['flavor', 'body', 'sweetness'], waitFor: ['acidity'] })
+      }
     })
 
     it('move on to the Score Cards once every window is tasted or past, cup by cup, naming the unrated Attributes', () => {

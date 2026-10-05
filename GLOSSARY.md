@@ -100,6 +100,10 @@ _Avoid_: Accuracy
 A piece of evidence about a coffee's Attributes given to the Player during cupping: a tasting note, a visual or sensory effect, or an NPC Cupper's remark.
 _Avoid_: Clue, hint, flavor text
 
+**Remark**:
+The Tasting Cue an NPC Cupper speaks about one Attribute of a Blind Cup after each of their Slurps: noted under the Accuracy Window at the Cup Temperature they slurped at, then shifted by their Personality Bias, so a remark made too hot is unreliable.
+_Avoid_: Comment, chatter, hint
+
 **Cue Log**:
 The record of every Tasting Cue the Player has received about one Blind Cup during an Attempt, oldest first.
 _Avoid_: Cue history, notes, journal

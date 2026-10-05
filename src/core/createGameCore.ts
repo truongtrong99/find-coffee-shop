@@ -1,9 +1,10 @@
 import { assertValidTastingTuning, isStoneCold, windowPosition } from './accuracyWindows'
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
+import type { CueConditions } from './cupping'
 import { GameRuleError } from './errors'
 import { biasesShown, cupperJournal } from './cupperJournal'
-import { npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
+import { npcRemark, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
 import {
   assertValidUnlockRules,
@@ -105,9 +106,21 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
   let cupContents: BlindCupContent[] = []
   /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
   let seated: { npc: NpcCupperContent; plannedSteps: PerformedStep[] }[] = []
+  /** The Lineup's remarks the clock has yet to reach, oldest first. */
+  let pendingRemarks: { atSeconds: number; cupLetter: string; remark: TastingCue }[] = []
 
   function windowsAt(temperature: number): Record<Attribute, WindowPosition> {
     return mapAttributes((attribute) => windowPosition(temperature, accuracyWindows[attribute], stoneColdTemperature))
+  }
+
+  function cueConditionsAt(temperature: number): CueConditions {
+    return {
+      temperature,
+      windows: windowsAt(temperature),
+      vagueTastingNotes: content.vagueTastingNotes,
+      skewedCueChance: content.tuning.tasting.skewedCueChance,
+      random,
+    }
   }
 
   function cupIndex(cupLetter: string): number {
@@ -118,6 +131,16 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
 
   function replaceCup(index: number, cup: CupProgress): void {
     attempt = { ...attempt!, cups: attempt!.cups.map((c, i) => (i === index ? cup : c)) }
+  }
+
+  /** Adds every remark the clock has reached to its cup's Cue Log. */
+  function logRemarksMade(): void {
+    while (pendingRemarks.length > 0 && pendingRemarks[0]!.atSeconds <= attempt!.elapsedSeconds) {
+      const { cupLetter, remark } = pendingRemarks.shift()!
+      const index = cupIndex(cupLetter)
+      const cup = attempt!.cups[index]!
+      replaceCup(index, { ...cup, cues: [...cup.cues, remark] })
+    }
   }
 
   function findCuppingSession(sessionId: string): { lab: LabContent; session: CuppingSessionContent } {
@@ -156,11 +179,20 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         )
       }
       const letters = session.cups.map((cup) => cup.letter)
-      seated = seatSessionLineup(lab, session, lineup).map((npc) => ({
-        npc,
-        plannedSteps: planSchedule(npc.schedule, letters, cooling),
-      }))
+      const lineupNpcs = seatSessionLineup(lab, session, lineup)
       cupContents = session.cups
+      seated = lineupNpcs.map((npc) => ({
+        npc,
+        plannedSteps: planSchedule(npc.schedule, letters, cooling, (cupLetter, temperature) =>
+          npcRemark(npc, cupContents[cupIndex(cupLetter)]!, cueConditionsAt(temperature)),
+        ),
+      }))
+      // Sorting is stable, so remarks made at the same moment keep Seat order.
+      pendingRemarks = seated
+        .flatMap(({ plannedSteps }) =>
+          plannedSteps.flatMap(({ atSeconds, cupLetter, remark }) => (remark ? [{ atSeconds, cupLetter, remark }] : [])),
+        )
+        .sort((a, b) => a.atSeconds - b.atSeconds)
       attempt = {
         sessionId,
         elapsedSeconds: 0,
@@ -172,6 +204,7 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
           scoreCard: {},
         })),
       }
+      logRemarksMade()
     },
     checkLineup(sessionId, lineup) {
       const { lab, session } = findCuppingSession(sessionId)
@@ -194,21 +227,16 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         elapsedSeconds,
         cups: attempt.cups.map((cup) => ({ ...cup, temperature: temperatureAt(elapsedSeconds) })),
       }
+      logRemarksMade()
     },
     performStep(cupLetter, step) {
       if (!attempt) throw new GameRuleError('No Attempt in progress to perform a Cupping Step in')
       const index = cupIndex(cupLetter)
       const cup = attempt.cups[index]!
       assertStepAllowed(cupLetter, cup.completedSteps, step)
-      const given = cuesForStep(cupContents[index]!, step, {
-        temperature: cup.temperature,
-        windows: windowsAt(cup.temperature),
-        vagueTastingNotes: content.vagueTastingNotes,
-        skewedCueChance: content.tuning.tasting.skewedCueChance,
-        random,
-      })
+      const given = cuesForStep(cupContents[index]!, step, cueConditionsAt(cup.temperature))
       replaceCup(index, { ...cup, completedSteps: [...cup.completedSteps, step], cues: [...cup.cues, ...given] })
-      return given.map((cue) => ({ ...cue }))
+      return given.map(copyCue)
     },
     setRating(cupLetter, attribute, rating) {
       if (!attempt) throw new GameRuleError('No Attempt in progress to rate a Score Card in')
@@ -266,7 +294,7 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
       const cups: BlindCupState[] = attempt.cups.map((cup) => ({
         ...cup,
         completedSteps: [...cup.completedSteps],
-        cues: cup.cues.map((cue) => ({ ...cue })),
+        cues: cup.cues.map(copyCue),
         windows: windowsAt(cup.temperature),
         stoneCold: isStoneCold(cup.temperature, stoneColdTemperature),
         scoreCard: { ...cup.scoreCard },
@@ -277,7 +305,9 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         cups,
         npcCuppers: seated.map(({ npc, plannedSteps }) => ({
           ...summarize(npc),
-          steps: plannedSteps.filter((s) => s.atSeconds <= attempt!.elapsedSeconds).map((s) => ({ ...s })),
+          steps: plannedSteps
+            .filter((s) => s.atSeconds <= attempt!.elapsedSeconds)
+            .map((s) => ({ ...s, remark: s.remark && copyCue(s.remark) })),
         })),
         canSubmit: cups.every((cup) => cup.scoreCardComplete),
         tutorialPrompt: findCuppingSession(attempt.sessionId).session.tutorial && tutorialPrompt(cups),
@@ -287,4 +317,8 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
       return cupperJournal(content, progress)
     },
   }
+}
+
+function copyCue(cue: TastingCue): TastingCue {
+  return { ...cue, remarkBy: cue.remarkBy && { ...cue.remarkBy } }
 }

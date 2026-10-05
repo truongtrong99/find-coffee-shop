@@ -1,10 +1,11 @@
 import { useFrame } from '@react-three/fiber'
-import { useRef, type RefObject } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { PerspectiveCamera, Vector3 } from 'three'
-import { STEP_NAMES } from '../../core'
+import { ATTRIBUTE_NAMES, STEP_NAMES } from '../../core'
 import type { BlindCupState, PerformedStep } from '../../core'
-import { reactionTo } from '../cueDisplay'
+import { ATTRIBUTE_ICONS, reactionTo } from '../cueDisplay'
 import { useGameStore } from '../store'
+import { speak } from '../voiceBlips'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
 
@@ -30,6 +31,10 @@ const TABLE_CENTRE: [number, number] = [0, 0]
 
 /** Game seconds an NPC Cupper is shown performing a Cupping Step; following the core's clock. */
 const STEP_SHOWN_GAME_SECONDS = 2.5
+/** Real seconds an NPC Cupper's remark stays in its speech bubble, long enough to read at any speed. */
+const REMARK_SHOWN_REAL_SECONDS = 3.5
+/** Each NPC Cupper's voice blips, by their colour, so Cuppers sound apart. */
+const NPC_VOICES_HZ = [330, 440, 262, 392, 294, 494, 349, 220]
 
 interface CameraPose {
   position: Vector3
@@ -106,6 +111,8 @@ interface SeatedNpc {
   id: string
   name: string
   latestStep: PerformedStep | undefined
+  /** Their latest Slurp, which carries their latest remark, and its place among their steps; undefined before one. */
+  latestSlurp: { step: PerformedStep; index: number } | undefined
 }
 
 /**
@@ -117,30 +124,72 @@ function useSeatedNpcs(): SeatedNpc[] {
   const lineup = useGameStore((s) => s.lineup)
   const lineupFits = useGameStore((s) => s.lineupRejection === null)
   const options = useGameStore((s) => s.session?.lineupOptions)
-  if (npcCuppers) return npcCuppers.map(({ id, name, steps }) => ({ id, name, latestStep: steps.at(-1) }))
+  if (npcCuppers) {
+    return npcCuppers.map(({ id, name, steps }) => {
+      const index = steps.reduce((last, step, i) => (step.remark ? i : last), -1)
+      return { id, name, latestStep: steps.at(-1), latestSlurp: index === -1 ? undefined : { step: steps[index]!, index } }
+    })
+  }
   if (!lineupFits || !options) return []
-  return lineup.map((id) => ({ id, name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id, latestStep: undefined }))
+  return lineup.map((id) => ({
+    id,
+    name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id,
+    latestStep: undefined,
+    latestSlurp: undefined,
+  }))
 }
 
-function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivElement | null>; showLabels: boolean }) {
-  const seated = useSeatedNpcs()
-  const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
-  const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
-  const options = useGameStore((s) => s.session?.lineupOptions)
-  return seated.map(({ id, name, latestStep }, seat) => {
-    const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
-    const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1
-    const colorIndex = (options?.npcCuppers ?? []).findIndex((npc) => npc.id === id)
-    return (
-      <Cupper
-        key={id}
-        position={SEAT_POSITIONS[seat]!}
-        color={NPC_COLORS[colorIndex % NPC_COLORS.length]}
-        facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
-        leaning={cupIndex !== -1}
-        labelLayer={labelLayer}
-        label={
-          showLabels && (
+/**
+ * The remark from an NPC Cupper's latest Slurp while its speech bubble shows, voiced with blips once as it is made.
+ * Presentation only: the core decides the remark and when it is made.
+ */
+function useSpokenRemark(latestSlurp: SeatedNpc['latestSlurp'], voiceHz: number): PerformedStep | undefined {
+  const [shown, setShown] = useState<PerformedStep>()
+  const index = latestSlurp?.index
+  useEffect(() => {
+    if (!latestSlurp) return setShown(undefined)
+    setShown(latestSlurp.step)
+    speak(latestSlurp.step.remark!.note, voiceHz)
+    const timer = setTimeout(() => setShown(undefined), REMARK_SHOWN_REAL_SECONDS * 1000)
+    return () => clearTimeout(timer)
+    // Keyed on the Slurp's place among their steps: a new remark is a new latest Slurp, while every tick's fresh
+    // snapshot of the same one must not voice it again.
+  }, [index])
+  return shown
+}
+
+interface NpcCupperProps extends SeatedNpc {
+  seat: number
+  colorIndex: number
+  cups: BlindCupState[]
+  elapsed: number
+  labelLayer: RefObject<HTMLDivElement | null>
+  showLabels: boolean
+}
+
+function NpcCupper({ name, latestStep, latestSlurp, seat, colorIndex, cups, elapsed, labelLayer, showLabels }: NpcCupperProps) {
+  const speaking = useSpokenRemark(latestSlurp, NPC_VOICES_HZ[colorIndex % NPC_VOICES_HZ.length] ?? NPC_VOICES_HZ[0]!)
+  const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
+  const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1
+  const remark = speaking?.remark
+  return (
+    <Cupper
+      position={SEAT_POSITIONS[seat]!}
+      color={NPC_COLORS[colorIndex % NPC_COLORS.length]}
+      facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
+      leaning={cupIndex !== -1}
+      labelLayer={labelLayer}
+      label={
+        showLabels && (
+          <div className="cupper-tag">
+            {remark && (
+              <div className="speech-bubble" role="status">
+                {ATTRIBUTE_ICONS[remark.attribute]} “{remark.note}”
+                <small>
+                  Cup {speaking.cupLetter} · {ATTRIBUTE_NAMES[remark.attribute]} · {Math.round(remark.temperature)}°C
+                </small>
+              </div>
+            )}
             <div className={performing ? 'cupper-label performing' : 'cupper-label'}>
               {name}
               {performing && (
@@ -149,11 +198,30 @@ function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivE
                 </small>
               )}
             </div>
-          )
-        }
-      />
-    )
-  })
+          </div>
+        )
+      }
+    />
+  )
+}
+
+function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivElement | null>; showLabels: boolean }) {
+  const seated = useSeatedNpcs()
+  const cups = useGameStore((s) => s.attempt?.cups ?? NO_CUPS)
+  const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
+  const options = useGameStore((s) => s.session?.lineupOptions)
+  return seated.map((npc, seat) => (
+    <NpcCupper
+      key={npc.id}
+      {...npc}
+      seat={seat}
+      colorIndex={(options?.npcCuppers ?? []).findIndex((n) => n.id === npc.id)}
+      cups={cups}
+      elapsed={elapsed}
+      labelLayer={labelLayer}
+      showLabels={showLabels}
+    />
+  ))
 }
 
 /** The Player at the front of the table, leaning in over the cup in first-person and reacting to their latest cues. */

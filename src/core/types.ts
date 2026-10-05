@@ -70,6 +70,11 @@ export interface TastingCue {
    * Score inside the Accuracy Window, possibly a wrong one outside it. Undefined when the cue is vague.
    */
   suggestedRating: Rating | undefined
+  /**
+   * The NPC Cupper whose remark this is, after one of their Slurps: noted at the Cup Temperature they slurped at and
+   * coloured by their Personality Bias. Undefined for the Player's own cues.
+   */
+  remarkBy: NpcCupperSummary | undefined
 }
 
 /** What makes a Cupping Session the guided tutorial. */
@@ -185,6 +190,8 @@ export interface PerformedStep {
   atSeconds: number
   /** The Cup Temperature at that moment. */
   temperature: number
+  /** After a Slurp, the remark they made about the cup, also in its Cue Log; undefined after any other step. */
+  remark: TastingCue | undefined
 }
 
 /** An NPC Cupper seated for an Attempt. */

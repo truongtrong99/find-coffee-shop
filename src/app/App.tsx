@@ -443,12 +443,13 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
       ) : (
         <ol className="cue-log">
           {cup.cues.map((cue, i) => (
-            <li key={i} ref={i === cup.cues.length - 1 ? logEnd : undefined} className={cue.window}>
+            <li key={i} ref={i === cup.cues.length - 1 ? logEnd : undefined} className={classNames(cue.window, cue.remarkBy !== undefined && 'remark')}>
               <span className="cue-meta">
-                {ATTRIBUTE_ICONS[cue.attribute]} {STEP_LABELS[cue.step]} · {ATTRIBUTE_NAMES[cue.attribute]} ·{' '}
-                {Math.round(cue.temperature)}°C{cue.window !== 'inside' && <em> · {WINDOW_LABELS[cue.window]}</em>}
+                {ATTRIBUTE_ICONS[cue.attribute]} {cue.remarkBy ? `🗣 ${cue.remarkBy.name}'s remark` : STEP_LABELS[cue.step]} ·{' '}
+                {ATTRIBUTE_NAMES[cue.attribute]} · {Math.round(cue.temperature)}°C
+                {cue.window !== 'inside' && <em> · {WINDOW_LABELS[cue.window]}</em>}
               </span>
-              {cue.note}
+              {cue.remarkBy ? `“${cue.note}”` : cue.note}
             </li>
           ))}
         </ol>

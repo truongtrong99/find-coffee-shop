@@ -872,3 +872,56 @@ body,
 .lineup-picks button[aria-pressed='true'] .journal-bias {
   color: #f6c9b9;
 }
+
+.cue-log li.remark {
+  border-left: 4px solid #81b29a;
+  font-style: italic;
+}
+
+.cupper-tag {
+  position: relative;
+}
+
+/* Sits above the Cupper's name label without moving it. */
+.speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: 220px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: #fff;
+  color: #4a3222;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  white-space: normal;
+  box-shadow: 0 2px 6px rgba(74, 50, 34, 0.2);
+  animation: speech-pop 0.2s ease-out;
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  margin-left: -7px;
+  border: 7px solid transparent;
+  border-bottom: 0;
+  border-top-color: #fff;
+}
+
+.speech-bubble small {
+  display: block;
+  font-size: 11px;
+  color: #a0785a;
+}
+
+@keyframes speech-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}

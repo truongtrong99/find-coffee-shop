@@ -83,6 +83,17 @@ await withGamePage(async (page) => {
   console.log(`Cupped Cup ${letters[0]}: ${await cueLog.count()} Tasting Cues; the tutorial moves on to Cup ${letters[1]}`)
   await screenshot(page, 'screenshots/play-2-cupped.png')
 
+  // NPC Cuppers remark after their Slurps: a speech bubble over the speaker, and a Tasting Cue in the Cue Log.
+  await page.getByRole('button', { name: '8×' }).click()
+  const speechBubble = page.locator('.speech-bubble')
+  await speechBubble.first().waitFor({ timeout: 30000 }).catch(() => {
+    throw new Error('no NPC Cupper remarked in a speech bubble after slurping')
+  })
+  await expectState(cueLog.filter({ hasText: /🗣 (Pip|Mochi)'s remark/i }).first(), "an NPC Cupper's remark is not in the Cue Log")
+  console.log(`NPC remark: ${(await speechBubble.first().innerText()).replace(/\n/g, ' · ')}`)
+  await screenshot(page, 'screenshots/play-2-npc-remark.png')
+  await page.getByRole('button', { name: '1×' }).click()
+
   // Rate every Attribute on every cup, checking Submit stays disabled until the last gap is filled.
   await expectState(submitWhen(true), 'Submit is enabled before any Score Card is rated')
   for (const [cupIndex, letter] of letters.entries()) {

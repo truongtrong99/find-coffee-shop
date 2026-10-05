@@ -45,12 +45,14 @@ export function assertTutorialLineup(
 }
 
 /**
- * The Accuracy Windows a cup is still to be tasted inside: those of Attributes with no accurate cue in its Cue Log,
- * split into open now and still too hot. A window the cup has cooled past is let go.
+ * The Accuracy Windows a cup is still to be tasted inside: those of Attributes with none of the Player's own cues from
+ * inside the window in its Cue Log, split into open now and still too hot. A window the cup has cooled past is let go.
+ * An NPC Cupper's remark tastes nothing for the Player.
  */
 function windowsToTaste(cup: BlindCupState) {
   const untasted = ATTRIBUTES.filter(
-    (attribute) => !cup.cues.some((cue) => cue.attribute === attribute && cue.window === 'inside'),
+    (attribute) =>
+      !cup.cues.some((cue) => cue.remarkBy === undefined && cue.attribute === attribute && cue.window === 'inside'),
   )
   return {
     slurpNow: untasted.filter((attribute) => cup.windows[attribute] === 'inside'),
