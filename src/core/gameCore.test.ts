@@ -1404,7 +1404,7 @@ describe('the Cupper Journal', () => {
       expect(acidity).toContain(undefined)
     })
 
-    it('only ever records the true Personality Bias, never one on an Attribute the NPC Cupper rates fairly', () => {
+    it('only ever records their actual Personality Bias, never one on an Attribute the NPC Cupper rates fairly', () => {
       for (const seed of SEEDS) {
         const discovered = pipAfterOneReveal(seed)
         expect({ acidity: 2, sweetness: -1 }).toMatchObject(discovered)

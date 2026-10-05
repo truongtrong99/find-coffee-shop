@@ -2,7 +2,7 @@ import { assertValidTastingTuning, isStoneCold, windowPosition } from './accurac
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
-import { biasShown, cupperJournal } from './cupperJournal'
+import { biasesShown, cupperJournal } from './cupperJournal'
 import { npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
 import {
@@ -243,13 +243,7 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
       const recorded = recordAttempt(content, progress, {
         sessionId: scored.sessionId,
         stars: scored.stars,
-        shownBiases: seated.map(({ npc }, seat) => ({
-          npc,
-          bias: biasShown(
-            npc,
-            scored.cups.map((cup) => ({ referenceScore: cup.referenceScore, scoreCard: cup.npcScoreCards[seat]!.scoreCard })),
-          ),
-        })),
+        shownBiases: biasesShown(seated.map(({ npc }) => npc), scored.cups),
       })
       progress = recorded.progress
       saveStore.save(serializeProgress(progress))

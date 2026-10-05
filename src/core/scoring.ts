@@ -48,6 +48,9 @@ export function mapAttributes<T>(fn: (attribute: Attribute) => T): Record<Attrib
   return Object.fromEntries(ATTRIBUTES.map((attribute) => [attribute, fn(attribute)])) as Record<Attribute, T>
 }
 
+/** What scoring an Attempt reveals, before progression adds what it unlocked and discovered. */
+export type ScoredAttempt = Pick<RevealResult, 'sessionId' | 'cups' | 'calibrationPoints' | 'maxCalibrationPoints' | 'stars'>
+
 /**
  * Scores each of the Player's submitted Score Cards against its Blind Cup's Reference Score.
  * Every Score Card must be complete. NPC Score Cards are shown, not scored.
@@ -55,7 +58,7 @@ export function mapAttributes<T>(fn: (attribute: Attribute) => T): Record<Attrib
 export function revealAttempt(
   sessionId: string,
   cups: readonly { content: BlindCupContent; scoreCard: ScoreCard; npcScoreCards: NpcScoreCard[] }[],
-): Omit<RevealResult, 'newBest' | 'unlockedLabs' | 'unlockedNpcCuppers' | 'journalDiscoveries'> {
+): ScoredAttempt {
   const revealed = cups.map(({ content: cup, scoreCard: submitted, npcScoreCards }) => {
     const scoreCard = mapAttributes((attribute) => submitted[attribute]!)
     return {

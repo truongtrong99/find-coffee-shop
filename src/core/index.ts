@@ -29,6 +29,7 @@ export type {
   NpcSchedule,
   NpcScoreCard,
   PerformedStep,
+  PersonalityBias,
   Rating,
   ReferenceScore,
   RevealedCup,

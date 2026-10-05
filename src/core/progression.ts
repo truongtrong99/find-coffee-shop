@@ -6,6 +6,7 @@ import type {
   LabContent,
   LabMap,
   NpcCupperContent,
+  PersonalityBias,
   StarCount,
   UnlockDescription,
   UnlockRule,
@@ -14,16 +15,13 @@ import type {
 /** The best Stars per Cupping Session id; a session never starred is absent. */
 export type BestStars = Readonly<Record<string, StarCount>>
 
-/** Per Attribute, the cups an NPC Cupper's Personality Bias adds to the Reference Score. */
-export type Bias = Partial<Record<Attribute, number>>
-
 /** Everything the Player has earned, as saved between visits. */
 export interface Progress {
   bestStars: BestStars
   /** The ids of the NPC Cuppers unlocked so far; once unlocked, an NPC Cupper stays unlocked. */
   unlockedNpcCuppers: ReadonlySet<string>
   /** Per NPC Cupper id, the Personality Bias Reveals have shown; an NPC Cupper with nothing shown is absent. */
-  discoveredBiases: Readonly<Record<string, Bias>>
+  discoveredBiases: Readonly<Record<string, PersonalityBias>>
 }
 
 type ProgressionContent = Pick<GameContent, 'labs' | 'npcCuppers'>
@@ -47,7 +45,7 @@ function meetsUnlockRule(rule: UnlockRule, best: BestStars): boolean {
   }
 }
 
-/** The ids of the NPC Cuppers unlocked with these best Stars and none unlocked before; on first launch, the starters. */
+/** The ids of the NPC Cuppers whose unlock rule these best Stars meet; with no Stars, as on first launch, the starters. */
 export function npcCuppersUnlockedBy(npcCuppers: readonly NpcCupperContent[], best: BestStars): Set<string> {
   return new Set(npcCuppers.filter((npc) => meetsUnlockRule(npc.unlock, best)).map((npc) => npc.id))
 }
@@ -93,7 +91,7 @@ export interface AttemptOutcome {
   sessionId: string
   stars: StarCount
   /** Each Lineup NPC Cupper with the Personality Bias their Score Cards showed at the Reveal. */
-  shownBiases: readonly { npc: NpcCupperContent; bias: Bias }[]
+  shownBiases: readonly { npc: NpcCupperContent; bias: PersonalityBias }[]
 }
 
 /** What a Submitted Attempt changes in progression. */
@@ -120,9 +118,9 @@ export function recordAttempt(
 ): RecordedAttempt {
   const best = progress.bestStars
   const newBest = stars > (best[sessionId] ?? 0)
-  const after = newBest ? { ...best, [sessionId]: stars } : best
-  const meetingRules = npcCuppersUnlockedBy(npcCuppers, after)
-  const unlockedNpcCuppers = npcCuppers.filter((npc) => !progress.unlockedNpcCuppers.has(npc.id) && meetingRules.has(npc.id))
+  const bestAfter = newBest ? { ...best, [sessionId]: stars } : best
+  const rulesMet = npcCuppersUnlockedBy(npcCuppers, bestAfter)
+  const unlockedNpcCuppers = npcCuppers.filter((npc) => !progress.unlockedNpcCuppers.has(npc.id) && rulesMet.has(npc.id))
 
   const discoveredBiases = { ...progress.discoveredBiases }
   const discoveries: RecordedAttempt['discoveries'] = []
@@ -137,12 +135,12 @@ export function recordAttempt(
 
   return {
     progress: {
-      bestStars: after,
+      bestStars: bestAfter,
       unlockedNpcCuppers: new Set([...progress.unlockedNpcCuppers, ...unlockedNpcCuppers.map((npc) => npc.id)]),
       discoveredBiases,
     },
     newBest,
-    unlockedLabs: labs.filter((lab) => !isLabUnlocked(lab, best) && isLabUnlocked(lab, after)),
+    unlockedLabs: labs.filter((lab) => !isLabUnlocked(lab, best) && isLabUnlocked(lab, bestAfter)),
     unlockedNpcCuppers,
     discoveries,
   }
@@ -158,7 +156,7 @@ interface SavedProgress {
   version: typeof SAVE_VERSION
   bestStars: Record<string, StarCount>
   unlockedNpcCuppers?: string[]
-  discoveredBiases?: Record<string, Bias>
+  discoveredBiases?: Record<string, PersonalityBias>
 }
 
 export function serializeProgress({ bestStars, unlockedNpcCuppers, discoveredBiases }: Progress): string {
@@ -191,13 +189,13 @@ function loadBestStars(saved: unknown, labs: readonly LabContent[]): BestStars {
 }
 
 /** The saved discoveries, keeping only those that still match the content's NPC Cuppers' Personality Biases. */
-function loadDiscoveredBiases(saved: unknown, npcCuppers: readonly NpcCupperContent[]): Record<string, Bias> {
+function loadDiscoveredBiases(saved: unknown, npcCuppers: readonly NpcCupperContent[]): Record<string, PersonalityBias> {
   if (!isRecord(saved)) return {}
-  const discovered: Record<string, Bias> = {}
+  const discovered: Record<string, PersonalityBias> = {}
   for (const npc of npcCuppers) {
     const savedBias = saved[npc.id]
     if (!isRecord(savedBias)) continue
-    const bias: Bias = {}
+    const bias: PersonalityBias = {}
     for (const attribute of ATTRIBUTES) {
       if (savedBias[attribute] !== undefined && savedBias[attribute] === npc.personalityBias[attribute]) {
         bias[attribute] = npc.personalityBias[attribute]

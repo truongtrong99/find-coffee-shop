@@ -96,6 +96,9 @@ export interface LabContent {
   sessions: CuppingSessionContent[]
 }
 
+/** Per Attribute, the cups an NPC Cupper adds to the Reference Score; negative when they under-rate it, absent when unbiased. */
+export type PersonalityBias = Partial<Record<Attribute, number>>
+
 /** How an NPC Cupper becomes available for a Lineup. Once unlocked, they stay unlocked. */
 export type UnlockRule =
   /** Unlocked from the start. */
@@ -122,8 +125,8 @@ export interface NpcCupperContent {
   /** The vague hint about their Personality Bias their Cupper Journal entry starts at, e.g. "loves bright coffees". */
   journalHint: string
   unlock: UnlockRule
-  /** Per-Attribute offset to the Reference Score on their Score Cards; unlisted Attributes are unbiased. */
-  personalityBias: Partial<Record<Attribute, number>>
+  /** Offset to the Reference Score on their Score Cards. */
+  personalityBias: PersonalityBias
   schedule: NpcSchedule
 }
 
@@ -285,7 +288,7 @@ export interface CupperJournalEntry extends NpcCupperSummary {
   /** The vague hint about their Personality Bias the entry starts at. */
   hint: string
   /** The Personality Bias Reveals have shown so far, per Attribute; Attributes not yet shown are absent. */
-  discoveredBias: Partial<Record<Attribute, number>>
+  discoveredBias: PersonalityBias
 }
 
 /** A Cupping Session on the Lab Map. */
