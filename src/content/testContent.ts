@@ -30,8 +30,9 @@ export interface TestTuningOverrides {
 }
 
 /**
- * Small fixture content for facade tests; independent of the shipped v1 content. Lab 2 and Lab 3 unlock at
- * the spec's 8 and 18 total Stars: Lab 1's four Cupping Sessions earn at most 12, Lab 2's two another 6.
+ * Small fixture content for facade tests; independent of the shipped v1 content. Lab 1 opens with a tutorial.
+ * Lab 2 and Lab 3 unlock at the spec's 8 and 18 total Stars: Lab 1's four other Cupping Sessions earn at most 12,
+ * Lab 2's two another 6.
  */
 export function makeTestContent({
   cooling = {},
@@ -106,6 +107,8 @@ export function makeTestContent({
         starsToUnlock: 0,
         seats: 2,
         sessions: [
+          // The guided tutorial, its Lineup pre-filled out of content order so tests can tell Seat order apart.
+          { id: 'lab-1-tutorial', name: 'Test Tutorial', cups: threeCups, tutorial: { lineup: ['mochi', 'pip'] } },
           { id: 'lab-1-session-1', name: 'Test Session', cups: threeCups },
           { id: 'lab-1-session-2', name: 'Second Test Session', cups: threeCups },
           { id: 'lab-1-session-3', name: 'Third Test Session', cups: threeCups },

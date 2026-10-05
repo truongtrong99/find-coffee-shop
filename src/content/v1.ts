@@ -92,7 +92,15 @@ function placeholderSessions(labId: string, names: readonly string[], coffees: r
   }))
 }
 
-/** v1 content so far: 3 Labs of placeholder Cupping Sessions with 3, 4 and 5 Blind Cups, and the 2 starter NPC Cuppers. */
+/** The sessions with the first made the guided tutorial, its Seats pre-filled with this Lineup. */
+function asTutorial([first, ...rest]: CuppingSessionContent[], lineup: string[]): CuppingSessionContent[] {
+  return [{ ...first!, tutorial: { lineup } }, ...rest]
+}
+
+/**
+ * v1 content so far: 3 Labs of placeholder Cupping Sessions with 3, 4 and 5 Blind Cups, Lab 1's first being the
+ * guided tutorial, and the 2 starter NPC Cuppers, both seated in it.
+ */
 export const content: GameContent = {
   tuning: {
     cooling: {
@@ -154,7 +162,10 @@ export const content: GameContent = {
       name: 'The First Lab',
       starsToUnlock: 0,
       seats: 2,
-      sessions: placeholderSessions('lab-1', ['First Cupping', 'Morning Table', 'Three Origins', 'Lab 1 Finale'], [yirgacheffe, mandheling, tarrazu]),
+      sessions: asTutorial(
+        placeholderSessions('lab-1', ['First Cupping', 'Morning Table', 'Three Origins', 'Lab 1 Finale'], [yirgacheffe, mandheling, tarrazu]),
+        ['pip', 'mochi'],
+      ),
     },
     {
       id: 'lab-2',

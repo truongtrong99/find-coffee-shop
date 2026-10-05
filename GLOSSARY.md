@@ -20,6 +20,14 @@ _Avoid_: Run, try, game
 The single action that locks in all of the Player's Score Cards for an Attempt and triggers the Reveal.
 _Avoid_: Finish, confirm
 
+**Tutorial**:
+Lab 1's first Cupping Session, open from first launch: its Lineup is pre-filled and Tutorial Prompts guide the Player, but it is scored and starred like any other Cupping Session.
+_Avoid_: Training, onboarding, practice round
+
+**Tutorial Prompt**:
+The Tutorial's guidance on what the Player does next: each Cupping Step on each Blind Cup, then Slurps inside the Accuracy Windows still to come, then the Score Cards, then Submit.
+_Avoid_: Hint, tip
+
 **Leave Lab**:
 The Player exiting a Lab back to the Lab Map; leaving mid-Attempt discards the Attempt.
 _Avoid_: Quit lab

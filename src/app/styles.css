@@ -739,3 +739,59 @@ body,
   font-size: 20px;
   font-weight: 800;
 }
+
+.lab-sessions button .tutorial-badge {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e07a5f;
+}
+
+/* Sticks to the top of the panel, so the Cue Log scrolling into view never hides it. */
+.tutorial-prompt {
+  position: sticky;
+  top: -14px;
+  z-index: 1;
+  padding: 10px 12px;
+  border: 2px solid #e07a5f;
+  border-radius: 12px;
+  background: #fff3e6;
+}
+
+.tutorial-prompt small {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e07a5f;
+}
+
+.tutorial-prompt h3 {
+  margin: 2px 0 4px;
+}
+
+.tutorial-prompt p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* What the tutorial's prompt points at. */
+.panel button.prompted,
+.panel .window-row.prompted,
+.panel .rating-row.prompted {
+  outline: 3px solid #f2b134;
+  outline-offset: 2px;
+  border-radius: 12px;
+  animation: prompted-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes prompted-pulse {
+  50% {
+    outline-color: rgba(242, 177, 52, 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel .prompted {
+    animation: none;
+  }
+}

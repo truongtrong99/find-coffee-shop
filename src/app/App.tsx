@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { content } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { AttemptState, BlindCupState, CuppingStep, LineupOptions, RevealedCup, StarCount } from '../core'
+import type { AttemptState, Attribute, BlindCupState, CuppingStep, LineupOptions, RevealedCup, StarCount, TutorialPrompt } from '../core'
 import { ATTRIBUTE_ICONS, WINDOW_LABELS } from './cueDisplay'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
@@ -90,6 +90,7 @@ function LabMapScreen() {
               {lab.sessions.map((session) => (
                 <button key={session.id} disabled={!lab.unlocked} onClick={() => openSession(session)}>
                   {session.name}
+                  {session.tutorial && <small className="tutorial-badge">Tutorial</small>}
                   <Stars count={session.bestStars} />
                 </button>
               ))}
@@ -162,15 +163,77 @@ function LineupScreen({ lineupOptions: { seats, npcCuppers } }: { lineupOptions:
   )
 }
 
+/** "Pip", "Pip and Mochi", "Pip, Mochi and Juniper". */
+function listOf(names: readonly string[]) {
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+}
+
+function attributeList(attributes: readonly Attribute[]) {
+  return listOf(attributes.map((attribute) => ATTRIBUTE_NAMES[attribute]))
+}
+
+const STEP_GUIDANCE: Record<CuppingStep, (cup: string) => string> = {
+  'dry-fragrance': (cup) =>
+    `Start with Dry Fragrance: smell Cup ${cup}'s dry grounds for an Aroma cue. It's optional, and only possible before you Pour.`,
+  pour: (cup) => `Pour hot water over Cup ${cup}'s grounds. A crust of grounds floats up to the top.`,
+  'break-the-crust': (cup) => `Break the Crust on Cup ${cup}: push through the floating grounds and catch the burst of aroma.`,
+  skim: (cup) => `Skim the last grounds off Cup ${cup}, so it's ready to taste.`,
+  slurp: (cup) => `Slurp Cup ${cup}! Each Slurp gives a Tasting Cue for every Attribute, added to the Cue Log below.`,
+}
+
+/** The tutorial's prompt, worded; which prompt shows is the core's decision. */
+function promptText(prompt: TutorialPrompt, firstLetter: string): { title: string; body: string } {
+  switch (prompt.kind) {
+    case 'cupping-step': {
+      const lead = prompt.cupLetter === firstLetter ? '' : `Every cup cools together, so cup Cup ${prompt.cupLetter} too. `
+      return { title: STEP_LABELS[prompt.step], body: lead + STEP_GUIDANCE[prompt.step](prompt.cupLetter) }
+    }
+    case 'accuracy-windows': {
+      const { cupLetter, slurpNow, waitFor } = prompt
+      const wait =
+        waitFor.length > 0
+          ? ` ${attributeList(waitFor)} ${waitFor.length === 1 ? 'is' : 'are'} still too hot: wait for the marker to reach ${waitFor.length === 1 ? 'its window' : 'their windows'}.`
+          : ''
+      const body =
+        slurpNow.length > 0
+          ? `Cup ${cupLetter} is inside the Accuracy Window for ${attributeList(slurpNow)}: Slurp now for accurate Tasting Cues.${wait}`
+          : `Outside its Accuracy Window, an Attribute's cue is vague or one cup off. Watch the thermometer as Cup ${cupLetter} cools.${wait}`
+      return { title: 'Read the thermometer', body }
+    }
+    case 'score-card':
+      return {
+        title: 'Fill in the Score Card',
+        body: `Rate ${attributeList(prompt.unrated)} on Cup ${prompt.cupLetter}'s Score Card, 1 to 5 cups. Trust the Tasting Cues from inside their Accuracy Windows.`,
+      }
+    case 'submit':
+      return {
+        title: 'Submit',
+        body: 'Every Score Card is complete. Submit to see the Reveal: each coffee, its Reference Score, and how close you came.',
+      }
+  }
+}
+
+function TutorialPromptCard({ prompt, attempt }: { prompt: TutorialPrompt; attempt: AttemptState }) {
+  const { title, body } = promptText(prompt, attempt.cups[0]!.letter)
+  const company = attempt.npcCuppers.map((npc) => npc.name)
+  return (
+    <section className="tutorial-prompt" aria-label="Tutorial" aria-live="polite">
+      <small>Tutorial{company.length > 0 && ` · cupping with ${listOf(company)}`}</small>
+      <h3>{title}</h3>
+      <p>{body}</p>
+    </section>
+  )
+}
+
 /** Each Attribute's Accuracy Window on one scale, with the cup's current temperature, so the Player can time Slurps. */
-function Thermometer({ cup }: { cup: BlindCupState }) {
+function Thermometer({ cup, prompted = [] }: { cup: BlindCupState; prompted?: readonly Attribute[] }) {
   return (
     <div className="thermometer">
       {ATTRIBUTES.map((attribute) => {
         const { min, max } = accuracyWindows[attribute]
         const position = cup.windows[attribute]
         return (
-          <div key={attribute} className={`window-row ${position}`}>
+          <div key={attribute} className={`window-row ${position}${prompted.includes(attribute) ? ' prompted' : ''}`}>
             <span className="window-name">
               {ATTRIBUTE_ICONS[attribute]} {ATTRIBUTE_NAMES[attribute]}
             </span>
@@ -203,12 +266,20 @@ function CuppingPanel() {
   return attempt && <AttemptPanel attempt={attempt} />
 }
 
-function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState }) {
+function AttemptPanel({ attempt }: { attempt: AttemptState }) {
+  const { cups, canSubmit, tutorialPrompt } = attempt
   const selectedLetter = useGameStore((s) => s.selectedLetter)
   const firstPersonLetter = useGameStore((s) => s.firstPersonLetter)
   const rejection = useGameStore((s) => s.rejection)
   const { selectCup, performStep, returnToDiorama, setRating, submit } = useGameStore.getState()
   const cup = cups.find((c) => c.letter === selectedLetter)!
+  // The tutorial's prompt points at one cup; it highlights that cup's controls once the Player looks at it.
+  const promptedCup = tutorialPrompt && 'cupLetter' in tutorialPrompt ? tutorialPrompt.cupLetter : undefined
+  const onPromptedCup = promptedCup === cup.letter
+  const promptedWindows = onPromptedCup && tutorialPrompt?.kind === 'accuracy-windows' ? tutorialPrompt.slurpNow : []
+  const promptedStep =
+    onPromptedCup && tutorialPrompt?.kind === 'cupping-step' ? tutorialPrompt.step : promptedWindows.length > 0 ? 'slurp' : undefined
+  const promptedRatings = onPromptedCup && tutorialPrompt?.kind === 'score-card' ? tutorialPrompt.unrated : []
   const logEnd = useRef<HTMLLIElement>(null)
 
   useEffect(() => {
@@ -217,9 +288,15 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
 
   return (
     <aside className="panel" aria-label="Cupping">
+      {tutorialPrompt && <TutorialPromptCard prompt={tutorialPrompt} attempt={attempt} />}
       <div className="cup-picker" role="group" aria-label="Blind Cups">
         {cups.map((c) => (
-          <button key={c.letter} aria-pressed={c.letter === selectedLetter} onClick={() => selectCup(c.letter)}>
+          <button
+            key={c.letter}
+            aria-pressed={c.letter === selectedLetter}
+            className={c.letter === promptedCup && !onPromptedCup ? 'prompted' : undefined}
+            onClick={() => selectCup(c.letter)}
+          >
             Cup {c.letter}
             {c.scoreCardComplete && <span aria-label="Score Card complete"> ✓</span>}
           </button>
@@ -232,8 +309,9 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
       <div className="steps" role="group" aria-label="Cupping Steps">
         {STEPS.map(({ step, label }) => {
           const done = step !== 'slurp' && cup.completedSteps.includes(step)
+          const className = [done && 'done', step === promptedStep && 'prompted'].filter(Boolean).join(' ')
           return (
-            <button key={step} className={done ? 'done' : undefined} onClick={() => performStep(step)}>
+            <button key={step} className={className || undefined} onClick={() => performStep(step)}>
               {done ? `✓ ${label}` : label}
             </button>
           )
@@ -251,7 +329,7 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
       )}
 
       <h3>Thermometer</h3>
-      <Thermometer cup={cup} />
+      <Thermometer cup={cup} prompted={promptedWindows} />
 
       <h3>Cue Log</h3>
       {cup.cues.length === 0 ? (
@@ -275,7 +353,12 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
         {ATTRIBUTES.map((attribute) => {
           const rated = cup.scoreCard[attribute]
           return (
-            <div key={attribute} className="rating-row" role="group" aria-label={ATTRIBUTE_NAMES[attribute]}>
+            <div
+              key={attribute}
+              className={promptedRatings.includes(attribute) ? 'rating-row prompted' : 'rating-row'}
+              role="group"
+              aria-label={ATTRIBUTE_NAMES[attribute]}
+            >
               <span>{ATTRIBUTE_NAMES[attribute]}</span>
               {RATINGS.map((rating) => (
                 <button
@@ -292,7 +375,7 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
           )
         })}
       </div>
-      <button className="submit" disabled={!canSubmit} onClick={submit}>
+      <button className={tutorialPrompt?.kind === 'submit' ? 'submit prompted' : 'submit'} disabled={!canSubmit} onClick={submit}>
         Submit
       </button>
       {!canSubmit && <p className="empty">Rate every Attribute on every cup to Submit.</p>}

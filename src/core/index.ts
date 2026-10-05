@@ -36,6 +36,8 @@ export type {
   TastingCue,
   TastingNotes,
   TastingTuning,
+  TutorialContent,
+  TutorialPrompt,
   UnlockRule,
   WindowPosition,
 } from './types'

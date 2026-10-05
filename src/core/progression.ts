@@ -19,7 +19,12 @@ export function labMap(labs: readonly LabContent[], best: BestStars): LabMap {
       name: lab.name,
       starsToUnlock: lab.starsToUnlock,
       unlocked: isLabUnlocked(lab, best),
-      sessions: lab.sessions.map((session) => ({ id: session.id, name: session.name, bestStars: best[session.id] ?? 0 })),
+      sessions: lab.sessions.map((session) => ({
+        id: session.id,
+        name: session.name,
+        bestStars: best[session.id] ?? 0,
+        tutorial: session.tutorial !== undefined,
+      })),
     })),
   }
 }

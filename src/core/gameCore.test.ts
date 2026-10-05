@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTestContent } from '../content/testContent'
 import type { TestTuningOverrides } from '../content/testContent'
 import { ATTRIBUTES, createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
-import type { Attribute, Rating, SaveStore, StarCount } from '.'
+import type { Attribute, GameContent, Rating, SaveStore, StarCount } from '.'
 
 const SESSION = 'lab-1-session-1'
 
@@ -943,10 +943,11 @@ describe('the Lab Map', () => {
           starsToUnlock: 0,
           unlocked: true,
           sessions: [
-            { id: 'lab-1-session-1', name: 'Test Session', bestStars: 0 },
-            { id: 'lab-1-session-2', name: 'Second Test Session', bestStars: 0 },
-            { id: 'lab-1-session-3', name: 'Third Test Session', bestStars: 0 },
-            { id: 'lab-1-session-4', name: 'Fourth Test Session', bestStars: 0 },
+            { id: 'lab-1-tutorial', name: 'Test Tutorial', bestStars: 0, tutorial: true },
+            { id: 'lab-1-session-1', name: 'Test Session', bestStars: 0, tutorial: false },
+            { id: 'lab-1-session-2', name: 'Second Test Session', bestStars: 0, tutorial: false },
+            { id: 'lab-1-session-3', name: 'Third Test Session', bestStars: 0, tutorial: false },
+            { id: 'lab-1-session-4', name: 'Fourth Test Session', bestStars: 0, tutorial: false },
           ],
         },
         {
@@ -955,8 +956,8 @@ describe('the Lab Map', () => {
           starsToUnlock: 8,
           unlocked: false,
           sessions: [
-            { id: 'lab-2-session-1', name: 'Four-cup Test Session', bestStars: 0 },
-            { id: 'lab-2-session-2', name: 'Second Four-cup Test Session', bestStars: 0 },
+            { id: 'lab-2-session-1', name: 'Four-cup Test Session', bestStars: 0, tutorial: false },
+            { id: 'lab-2-session-2', name: 'Second Four-cup Test Session', bestStars: 0, tutorial: false },
           ],
         },
         {
@@ -964,7 +965,7 @@ describe('the Lab Map', () => {
           name: 'Test Lab 3',
           starsToUnlock: 18,
           unlocked: false,
-          sessions: [{ id: 'lab-3-session-1', name: 'Three-cup Test Session in Lab 3', bestStars: 0 }],
+          sessions: [{ id: 'lab-3-session-1', name: 'Three-cup Test Session in Lab 3', bestStars: 0, tutorial: false }],
         },
       ],
     })
@@ -991,6 +992,11 @@ function playFor(game: ReturnType<typeof newGame>, session: string, stars: StarC
   return game.submit()
 }
 
+/** The best Stars of a Cupping Session on the Lab Map. */
+function bestStarsOf(game: ReturnType<typeof newGame>, session: string) {
+  return game.getLabMap().labs.flatMap((lab) => lab.sessions).find((s) => s.id === session)!.bestStars
+}
+
 /** Earns 9 total Stars in Lab 1, past Lab 2's 8, with perfect Attempts that draw nothing from the random source. */
 function unlockLab2(game: ReturnType<typeof newGame>) {
   for (const session of ['lab-1-session-1', 'lab-1-session-2', 'lab-1-session-3']) playFor(game, session, 3)
@@ -1003,13 +1009,13 @@ describe('best Stars per Cupping Session', () => {
     const reveal = playFor(game, 'lab-1-session-2', 2)
 
     expect(reveal.stars).toBe(2)
-    expect(game.getLabMap().labs[0]!.sessions.map((s) => s.bestStars)).toEqual([0, 2, 0, 0])
+    expect(game.getLabMap().labs[0]!.sessions.map((s) => s.bestStars)).toEqual([0, 0, 2, 0, 0])
     expect(game.getLabMap().totalStars).toBe(2)
   })
 
   it('keeps only the best result: a worse Attempt never lowers the best Stars, a better one replaces them', () => {
     const game = newGame()
-    const bestStars = () => game.getLabMap().labs[0]!.sessions[0]!.bestStars
+    const bestStars = () => bestStarsOf(game, SESSION)
 
     expect(playFor(game, SESSION, 2).newBest).toBe(true)
     expect(bestStars()).toBe(2)
@@ -1162,6 +1168,7 @@ describe('saving progress', () => {
 
     expect(after.getLabMap().totalStars).toBe(3)
     expect(after.getLabMap().labs[0]!.sessions.map((s) => [s.id, s.bestStars])).toEqual([
+      ['lab-1-tutorial', 0],
       ['lab-1-session-1', 3],
       ['lab-1-session-3', 0],
       ['lab-1-session-4', 0],
@@ -1193,7 +1200,7 @@ describe('Leave Lab', () => {
 
     game.leaveLab()
 
-    expect(game.getLabMap().labs[0]!.sessions[0]!.bestStars).toBe(2)
+    expect(bestStarsOf(game, SESSION)).toBe(2)
     expect(game.getLabMap().totalStars).toBe(2)
     expect(saveStore.load()).toBe(savedBefore)
   })
@@ -1219,5 +1226,206 @@ describe('Leave Lab', () => {
 
     expect(game.getAttempt()).toBeUndefined()
     expect(game.getLabMap().totalStars).toBe(1)
+  })
+})
+
+describe('the tutorial', () => {
+  const TUTORIAL = 'lab-1-tutorial'
+
+  it('is the first Cupping Session of Lab 1, open on first launch with no Stars', () => {
+    const game = newGame()
+
+    const [firstLab] = game.getLabMap().labs
+    expect(firstLab!.unlocked).toBe(true)
+    expect(firstLab!.sessions[0]).toEqual({ id: TUTORIAL, name: 'Test Tutorial', bestStars: 0, tutorial: true })
+    game.startAttempt(TUTORIAL, ['mochi', 'pip'])
+    expect(game.getAttempt()!.sessionId).toBe(TUTORIAL)
+  })
+
+  it('pre-fills its Lineup, so the Player is not asked to choose', () => {
+    expect(newGame().getLineupOptions(TUTORIAL).prefilledLineup).toEqual([
+      { id: 'mochi', name: 'Mochi' },
+      { id: 'pip', name: 'Pip' },
+    ])
+    expect(newGame().getLineupOptions(SESSION).prefilledLineup).toBeUndefined()
+  })
+
+  it('seats the pre-filled Lineup, in Seat order', () => {
+    const game = newGame()
+
+    game.startAttempt(TUTORIAL, ['mochi', 'pip'])
+
+    expect(game.getAttempt()!.npcCuppers.map((npc) => npc.id)).toEqual(['mochi', 'pip'])
+  })
+
+  it.each([[[]], [['pip', 'mochi']], [['mochi']], [['mochi', 'juniper']]])(
+    'rejects any other Lineup, %j, naming the pre-filled one',
+    (lineup) => {
+      const game = newGame()
+
+      expect(game.checkLineup(TUTORIAL, lineup)).toBe("The tutorial's Lineup is pre-filled: Mochi, Pip")
+      expect(() => game.startAttempt(TUTORIAL, lineup)).toThrow(GameRuleError)
+      expect(() => game.startAttempt(TUTORIAL, lineup)).toThrow("The tutorial's Lineup is pre-filled: Mochi, Pip")
+      expect(game.getAttempt()).toBeUndefined()
+      expect(game.checkLineup(TUTORIAL, ['mochi', 'pip'])).toBeUndefined()
+    },
+  )
+
+  it('is scored and starred like any other Cupping Session, counting towards total Stars', () => {
+    const game = newGame()
+    game.startAttempt(TUTORIAL, ['mochi', 'pip'])
+    rateAll(game, scoreCardsWith(TUTORIAL, 10, 2))
+
+    const reveal = game.submit()
+
+    // 10 exact matches and 2 near-misses: 32 of 45 Calibration Points, 71%.
+    expect(reveal).toMatchObject({ calibrationPoints: 32, maxCalibrationPoints: 45, stars: 2, newBest: true })
+    expect(reveal.cups[0]!.npcScoreCards.map((npc) => npc.id)).toEqual(['mochi', 'pip'])
+    expect(bestStarsOf(game, TUTORIAL)).toBe(2)
+    expect(game.getLabMap().totalStars).toBe(2)
+  })
+})
+
+describe('Tutorial Prompts', () => {
+  function tutorialGame() {
+    const game = newGame()
+    game.startAttempt('lab-1-tutorial', ['mochi', 'pip'])
+    return game
+  }
+  const prompt = (game: ReturnType<typeof newGame>) => game.getAttempt()!.tutorialPrompt
+
+  it('only guide the tutorial', () => {
+    expect(startedGame().getAttempt()!.tutorialPrompt).toBeUndefined()
+  })
+
+  it('guide each Cupping Step on the first cup, starting with the optional Dry Fragrance', () => {
+    const game = tutorialGame()
+    const prompted = [prompt(game)]
+    for (const step of ['dry-fragrance', 'pour', 'break-the-crust', 'skim'] as const) {
+      game.performStep('A', step)
+      prompted.push(prompt(game))
+    }
+
+    expect(prompted).toEqual([
+      { kind: 'cupping-step', cupLetter: 'A', step: 'dry-fragrance' },
+      { kind: 'cupping-step', cupLetter: 'A', step: 'pour' },
+      { kind: 'cupping-step', cupLetter: 'A', step: 'break-the-crust' },
+      { kind: 'cupping-step', cupLetter: 'A', step: 'skim' },
+      { kind: 'cupping-step', cupLetter: 'A', step: 'slurp' },
+    ])
+  })
+
+  it('move on to Break the Crust when the Player skips Dry Fragrance and Pours', () => {
+    const game = tutorialGame()
+
+    game.performStep('A', 'pour')
+
+    expect(prompt(game)).toEqual({ kind: 'cupping-step', cupLetter: 'A', step: 'break-the-crust' })
+  })
+
+  it('guide each other cup in turn up to its first Slurp, since every cup cools together', () => {
+    const game = tutorialGame()
+    for (const step of ['pour', 'break-the-crust', 'skim', 'slurp'] as const) game.performStep('A', step)
+
+    expect(prompt(game)).toEqual({ kind: 'cupping-step', cupLetter: 'B', step: 'dry-fragrance' })
+    for (const step of ['pour', 'break-the-crust', 'skim'] as const) game.performStep('B', step)
+    expect(prompt(game)).toEqual({ kind: 'cupping-step', cupLetter: 'B', step: 'slurp' })
+    game.performStep('B', 'slurp')
+    expect(prompt(game)).toEqual({ kind: 'cupping-step', cupLetter: 'C', step: 'dry-fragrance' })
+  })
+
+  it('prompt Submit as soon as every Score Card is complete, even before every cup is cupped', () => {
+    const game = tutorialGame()
+
+    rateAll(game, scoreCardsWith('lab-1-tutorial', 15, 0))
+
+    expect(prompt(game)).toEqual({ kind: 'submit' })
+  })
+
+  describe('then the thermometer', () => {
+    /** Pours, breaks the crust, skims and slurps every cup, at the starting 90°C. */
+    function slurpedAtStart() {
+      const game = tutorialGame()
+      for (const letter of ['A', 'B', 'C']) {
+        for (const step of ['pour', 'break-the-crust', 'skim', 'slurp'] as const) game.performStep(letter, step)
+      }
+      return game
+    }
+
+    it('ask for Slurps inside the Accuracy Windows not yet tasted, cup by cup, waiting for those still too hot', () => {
+      // At 90°C only Aroma's window (70–90) is open, so the first Slurps taste Aroma accurately and nothing else.
+      const game = slurpedAtStart()
+      const prompted = [prompt(game)]
+      // 45s in, the cups are at 68.6°C: inside Flavor's (40–80) and Body's (55–75) windows, still above Acidity's
+      // (35–55) and Sweetness's (35–60).
+      game.advanceClock(45)
+      prompted.push(prompt(game))
+      game.performStep('A', 'slurp')
+      prompted.push(prompt(game))
+      game.performStep('B', 'slurp')
+      game.performStep('C', 'slurp')
+      prompted.push(prompt(game))
+      // 110s in, at 48.7°C, Acidity's and Sweetness's windows are open.
+      game.advanceClock(65)
+      prompted.push(prompt(game))
+
+      expect(prompted).toEqual([
+        { kind: 'accuracy-windows', cupLetter: 'A', slurpNow: [], waitFor: ['flavor', 'acidity', 'body', 'sweetness'] },
+        { kind: 'accuracy-windows', cupLetter: 'A', slurpNow: ['flavor', 'body'], waitFor: ['acidity', 'sweetness'] },
+        { kind: 'accuracy-windows', cupLetter: 'B', slurpNow: ['flavor', 'body'], waitFor: ['acidity', 'sweetness'] },
+        { kind: 'accuracy-windows', cupLetter: 'A', slurpNow: [], waitFor: ['acidity', 'sweetness'] },
+        { kind: 'accuracy-windows', cupLetter: 'A', slurpNow: ['acidity', 'sweetness'], waitFor: [] },
+      ])
+    })
+
+    it('stop asking for an Attribute once the cup has cooled past its window untasted', () => {
+      const game = slurpedAtStart()
+
+      // At 48.7°C Body's window (55–75) has passed; Flavor's, Acidity's and Sweetness's are open.
+      game.advanceClock(110)
+
+      expect(prompt(game)).toEqual({ kind: 'accuracy-windows', cupLetter: 'A', slurpNow: ['flavor', 'acidity', 'sweetness'], waitFor: [] })
+    })
+
+    it('move on to the Score Cards once every window is tasted or past, cup by cup, naming the unrated Attributes', () => {
+      const game = slurpedAtStart()
+      // Stone cold at 240s: every window has passed.
+      game.advanceClock(240)
+      const prompted = [prompt(game)]
+      rateAll(game, { A: { aroma: 4, flavor: 3, acidity: 4, body: 2, sweetness: 3 }, B: { flavor: 5, body: 5 } })
+      prompted.push(prompt(game))
+
+      expect(prompted).toEqual([
+        { kind: 'score-card', cupLetter: 'A', unrated: ['aroma', 'flavor', 'acidity', 'body', 'sweetness'] },
+        { kind: 'score-card', cupLetter: 'B', unrated: ['aroma', 'acidity', 'sweetness'] },
+      ])
+    })
+
+    it('end by prompting Submit once every Score Card is complete', () => {
+      const game = slurpedAtStart()
+      game.advanceClock(240)
+
+      rateAll(game, scoreCardsWith('lab-1-tutorial', 15, 0))
+
+      expect(prompt(game)).toEqual({ kind: 'submit' })
+    })
+  })
+})
+
+describe('tutorial content', () => {
+  /** Test content with the tutorial changed by `change`. */
+  function contentWithTutorial(change: (content: GameContent) => void) {
+    const content = makeTestContent()
+    change(content)
+    return () => createGameCore({ content, saveStore: createMemorySaveStore(), random: createSeededRandom(1) })
+  }
+
+  it.each([
+    { problem: 'a locked NPC Cupper', change: (c: GameContent) => (c.labs[0]!.sessions[0]!.tutorial = { lineup: ['biscuit'] }), reason: /tutorial.*Biscuit.*locked/ },
+    { problem: 'more NPC Cuppers than Seats', change: (c: GameContent) => (c.labs[0]!.sessions[0]!.tutorial = { lineup: ['pip', 'mochi', 'juniper'] }), reason: /tutorial.*2 Seats/ },
+    { problem: 'a Lab locked on first launch', change: (c: GameContent) => (c.labs[1]!.sessions[0]!.tutorial = { lineup: [] }), reason: /tutorial.*Test Lab 2.*8 Stars/ },
+  ])('rejects a tutorial that cannot be played on first launch: $problem', ({ change, reason }) => {
+    expect(contentWithTutorial(change)).toThrow(GameRuleError)
+    expect(contentWithTutorial(change)).toThrow(reason)
   })
 })

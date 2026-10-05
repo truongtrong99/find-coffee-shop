@@ -7,6 +7,7 @@ import type { RandomSource, SaveStore } from './ports'
 import { isLabUnlocked, labMap, loadProgress, recordAttempt, serializeProgress, totalStars } from './progression'
 import type { BestStars } from './progression'
 import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
+import { assertTutorialLineup, assertValidTutorials, tutorialPrompt } from './tutorial'
 import type {
   AttemptState,
   Attribute,
@@ -34,12 +35,16 @@ export interface GameCoreDeps {
 export interface GameCore {
   /** The Lab Map: every Lab, whether it is unlocked and the Stars it needs, each Cupping Session's best Stars, and total Stars. */
   getLabMap(): LabMap
-  /** The Lab's Seat count and the NPC Cuppers available for a Lineup in this Cupping Session. */
+  /**
+   * The Lab's Seat count and the NPC Cuppers available for a Lineup in this Cupping Session, or for the tutorial,
+   * the pre-filled Lineup.
+   */
   getLineupOptions(sessionId: string): LineupOptions
   /**
    * Starts an Attempt of a Cupping Session with every Blind Cup on the table and the Lineup's
    * NPC Cuppers (by id) in the Seats. Rejected if the Cupping Session's Lab is locked, or if the Lineup
    * has a locked or repeated NPC Cupper or more NPC Cuppers than Seats; Seats may be left empty.
+   * The tutorial only takes its pre-filled Lineup.
    */
   startAttempt(sessionId: string, lineup: readonly string[]): void
   /** Why `startAttempt` would reject this Lineup for this Cupping Session, or undefined if it fits. */
@@ -72,11 +77,12 @@ export interface GameCore {
 
 /** What the core tracks for a Blind Cup; snapshots add what is derived from it. */
 type CupProgress = Omit<BlindCupState, 'scoreCardComplete' | 'windows' | 'stoneCold'>
-type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit'> & { cups: CupProgress[] }
+type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit' | 'tutorialPrompt'> & { cups: CupProgress[] }
 
 export function createGameCore({ content, saveStore, random }: GameCoreDeps): GameCore {
   const cooling = createCoolingCurve(content.tuning.cooling)
   assertValidTastingTuning(content.tuning.tasting)
+  assertValidTutorials(content.labs, content.npcCuppers)
   const { temperatureAt } = cooling
   const { accuracyWindows } = content.tuning.tasting
   const { stoneColdTemperature } = content.tuning.cooling
@@ -108,15 +114,22 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
     throw new GameRuleError(`Unknown Cupping Session "${sessionId}"`)
   }
 
+  /** The Lineup's NPC Cuppers in Seat order; throws a GameRuleError naming the first problem. */
+  function seatSessionLineup(lab: LabContent, session: CuppingSessionContent, lineup: readonly string[]): NpcCupperContent[] {
+    assertTutorialLineup(session, content.npcCuppers, lineup)
+    return seatLineup(content.npcCuppers, lab.seats, lineup)
+  }
+
   return {
     getLabMap() {
       return labMap(content.labs, bestStars)
     },
     getLineupOptions(sessionId) {
-      const { lab } = findCuppingSession(sessionId)
+      const { lab, session } = findCuppingSession(sessionId)
       return {
         seats: lab.seats,
         npcCuppers: content.npcCuppers.filter(isUnlocked).map(summarize),
+        prefilledLineup: session.tutorial && seatLineup(content.npcCuppers, lab.seats, session.tutorial.lineup).map(summarize),
       }
     },
     startAttempt(sessionId, lineup) {
@@ -125,7 +138,7 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         throw new GameRuleError(`${lab.name} is locked: it needs ${lab.starsToUnlock} Stars and you have ${totalStars(bestStars)}`)
       }
       const letters = session.cups.map((cup) => cup.letter)
-      seated = seatLineup(content.npcCuppers, lab.seats, lineup).map((npc) => ({
+      seated = seatSessionLineup(lab, session, lineup).map((npc) => ({
         npc,
         plannedSteps: planSchedule(npc.schedule, letters, cooling),
       }))
@@ -143,9 +156,9 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
       }
     },
     checkLineup(sessionId, lineup) {
-      const { lab } = findCuppingSession(sessionId)
+      const { lab, session } = findCuppingSession(sessionId)
       try {
-        seatLineup(content.npcCuppers, lab.seats, lineup)
+        seatSessionLineup(lab, session, lineup)
         return undefined
       } catch (error) {
         if (!(error instanceof GameRuleError)) throw error
@@ -222,25 +235,26 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
       attempt = undefined
     },
     getAttempt() {
-      return (
-        attempt && {
-          ...attempt,
-          cups: attempt.cups.map((cup) => ({
-            ...cup,
-            completedSteps: [...cup.completedSteps],
-            cues: cup.cues.map((cue) => ({ ...cue })),
-            windows: windowsAt(cup.temperature),
-            stoneCold: isStoneCold(cup.temperature, stoneColdTemperature),
-            scoreCard: { ...cup.scoreCard },
-            scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
-          })),
-          npcCuppers: seated.map(({ npc, plannedSteps }) => ({
-            ...summarize(npc),
-            steps: plannedSteps.filter((s) => s.atSeconds <= attempt!.elapsedSeconds).map((s) => ({ ...s })),
-          })),
-          canSubmit: attempt.cups.every((cup) => unratedAttributes(cup.scoreCard).length === 0),
-        }
-      )
+      if (!attempt) return undefined
+      const cups: BlindCupState[] = attempt.cups.map((cup) => ({
+        ...cup,
+        completedSteps: [...cup.completedSteps],
+        cues: cup.cues.map((cue) => ({ ...cue })),
+        windows: windowsAt(cup.temperature),
+        stoneCold: isStoneCold(cup.temperature, stoneColdTemperature),
+        scoreCard: { ...cup.scoreCard },
+        scoreCardComplete: unratedAttributes(cup.scoreCard).length === 0,
+      }))
+      return {
+        ...attempt,
+        cups,
+        npcCuppers: seated.map(({ npc, plannedSteps }) => ({
+          ...summarize(npc),
+          steps: plannedSteps.filter((s) => s.atSeconds <= attempt!.elapsedSeconds).map((s) => ({ ...s })),
+        })),
+        canSubmit: cups.every((cup) => cup.scoreCardComplete),
+        tutorialPrompt: findCuppingSession(attempt.sessionId).session.tutorial && tutorialPrompt(cups),
+      }
     },
   }
 }

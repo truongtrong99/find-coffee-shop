@@ -72,10 +72,18 @@ export interface TastingCue {
   suggestedRating: Rating | undefined
 }
 
+/** What makes a Cupping Session the guided tutorial. */
+export interface TutorialContent {
+  /** The NPC Cuppers (by id) pre-filling the Seats, in Seat order; the Player does not choose a Lineup. */
+  lineup: string[]
+}
+
 export interface CuppingSessionContent {
   id: string
   name: string
   cups: BlindCupContent[]
+  /** Set on the guided tutorial, Lab 1's first Cupping Session. */
+  tutorial?: TutorialContent
 }
 
 export interface LabContent {
@@ -136,6 +144,8 @@ export interface LineupOptions {
   seats: number
   /** The unlocked NPC Cuppers, in content order. */
   npcCuppers: NpcCupperSummary[]
+  /** For the tutorial, the NPC Cuppers pre-filling the Seats, in Seat order: the only Lineup it takes. */
+  prefilledLineup: NpcCupperSummary[] | undefined
 }
 
 export interface BlindCupState {
@@ -172,6 +182,20 @@ export interface NpcCupperState extends NpcCupperSummary {
   steps: PerformedStep[]
 }
 
+/** The tutorial's guidance on what the Player does next. */
+export type TutorialPrompt =
+  /** Perform this Cupping Step on this cup; on a fresh cup, Dry Fragrance is offered though the Player may Pour instead. */
+  | { kind: 'cupping-step'; cupLetter: string; step: CuppingStep }
+  /**
+   * Read the thermometer and Slurp this cup inside the Accuracy Windows of the Attributes it hasn't yet been
+   * tasted accurately for: those open now, and those still too hot to wait for. A window passed untasted is let go.
+   */
+  | { kind: 'accuracy-windows'; cupLetter: string; slurpNow: Attribute[]; waitFor: Attribute[] }
+  /** Rate these Attributes on this cup's Score Card. */
+  | { kind: 'score-card'; cupLetter: string; unrated: Attribute[] }
+  /** Every Score Card is complete, so Submit; this wins over any other prompt. */
+  | { kind: 'submit' }
+
 export interface AttemptState {
   sessionId: string
   /** Game seconds since the Attempt started. */
@@ -181,6 +205,8 @@ export interface AttemptState {
   npcCuppers: NpcCupperState[]
   /** Whether every Attribute on every Blind Cup is rated, so the Player may Submit. */
   canSubmit: boolean
+  /** In the tutorial, what the Player should do next; undefined in any other Cupping Session. */
+  tutorialPrompt: TutorialPrompt | undefined
 }
 
 /** Stars earned for Calibration in an Attempt; 0 below half the maximum Calibration Points. */
@@ -227,6 +253,8 @@ export interface CuppingSessionSummary {
   name: string
   /** The best Stars any Attempt of this Cupping Session has earned; 0 until one earns a Star. */
   bestStars: StarCount
+  /** Whether this is the guided tutorial, with a pre-filled Lineup and Tutorial Prompts. */
+  tutorial: boolean
 }
 
 /** A Lab on the Lab Map. */

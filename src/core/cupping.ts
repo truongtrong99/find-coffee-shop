@@ -15,7 +15,7 @@ export const STEP_NAMES: Record<CuppingStep, string> = {
  * Strict order: Dry Fragrance → Pour → Break the Crust → Skim, then Slurp as often as the Player likes.
  * Dry Fragrance is optional but only allowed before Pour.
  */
-function nextValidSteps(completedSteps: readonly CuppingStep[]): CuppingStep[] {
+export function nextValidSteps(completedSteps: readonly CuppingStep[]): CuppingStep[] {
   switch (completedSteps.at(-1)) {
     case undefined:
       return ['dry-fragrance', 'pour']

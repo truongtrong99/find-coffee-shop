@@ -72,7 +72,7 @@ interface GameStore {
   freshCues: FreshCues | null
   /** Whether the Player asked to Leave Lab mid-Attempt and is being asked to confirm. */
   confirmingLeave: boolean
-  /** Goes from the Lab Map to the Lineup screen for a Cupping Session. */
+  /** Goes from the Lab Map to the Lineup screen for a Cupping Session, or straight into the tutorial's pre-filled Lineup. */
   openSession(session: CuppingSessionSummary): void
   /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
   toggleLineup(npcId: string): void
@@ -84,7 +84,7 @@ interface GameStore {
   /** Rates an Attribute on the selected Blind Cup's Score Card. */
   setRating(attribute: Attribute, rating: number): void
   submit(): void
-  /** Returns to the Lineup screen for a fresh Attempt of the same Cupping Session after the Reveal. */
+  /** Returns to the Lineup screen for a fresh Attempt of the same Cupping Session after the Reveal, or restarts the tutorial. */
   cupAgain(): void
   /** Leaves the Lab for the Lab Map; mid-Attempt, asks the Player to confirm first. */
   leaveLab(): void
@@ -126,6 +126,14 @@ function pickedSessionId(get: () => GameStore): string {
   return session.id
 }
 
+/** The tutorial's Lineup is pre-filled, so it skips the Lineup screen and starts the Attempt with it. */
+function startPrefilledLineup(set: (partial: Partial<GameStore>) => void, get: () => GameStore): void {
+  const { prefilledLineup } = get().session!.lineupOptions
+  if (!prefilledLineup) return
+  set({ lineup: prefilledLineup.map((npc) => npc.id) })
+  get().startAttempt()
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
   labMap: core.getLabMap(),
   session: null,
@@ -141,6 +149,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   confirmingLeave: false,
   openSession({ id, name }) {
     set({ session: { id, name, lineupOptions: core.getLineupOptions(id) }, lineup: [], lineupRejection: null, rejection: null })
+    startPrefilledLineup(set, get)
   },
   toggleLineup(npcId) {
     const { lineup } = get()
@@ -191,6 +200,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   cupAgain() {
     const session = get().session!
     set({ session: { ...session, lineupOptions: core.getLineupOptions(session.id) }, attempt: null, reveal: null, rejection: null })
+    startPrefilledLineup(set, get)
   },
   leaveLab() {
     if (core.getAttempt()) return set({ confirmingLeave: true })
