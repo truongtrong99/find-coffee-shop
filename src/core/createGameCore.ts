@@ -2,10 +2,20 @@ import { assertValidTastingTuning, isStoneCold, windowPosition } from './accurac
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
-import { isUnlocked, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
+import { biasShown, cupperJournal } from './cupperJournal'
+import { npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
-import { isLabUnlocked, labMap, loadProgress, recordAttempt, serializeProgress, totalStars } from './progression'
-import type { BestStars } from './progression'
+import {
+  assertValidUnlockRules,
+  describeUnlock,
+  isLabUnlocked,
+  labMap,
+  loadProgress,
+  recordAttempt,
+  serializeProgress,
+  totalStars,
+} from './progression'
+import type { Progress } from './progression'
 import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
 import { assertTutorialLineup, assertValidTutorials, tutorialPrompt } from './tutorial'
 import type {
@@ -14,6 +24,7 @@ import type {
   BlindCupContent,
   BlindCupState,
   CuppingSessionContent,
+  CupperJournalEntry,
   CuppingStep,
   GameContent,
   LabContent,
@@ -73,6 +84,8 @@ export interface GameCore {
   leaveLab(): void
   /** The current Attempt, or undefined when none is in progress. A fresh snapshot each call. */
   getAttempt(): AttemptState | undefined
+  /** An entry per NPC Cupper, locked or not, in content order: their hint and the Personality Bias Reveals have shown. */
+  getCupperJournal(): CupperJournalEntry[]
 }
 
 /** What the core tracks for a Blind Cup; snapshots add what is derived from it. */
@@ -83,10 +96,11 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
   const cooling = createCoolingCurve(content.tuning.cooling)
   assertValidTastingTuning(content.tuning.tasting)
   assertValidTutorials(content.labs, content.npcCuppers)
+  assertValidUnlockRules(content)
   const { temperatureAt } = cooling
   const { accuracyWindows } = content.tuning.tasting
   const { stoneColdTemperature } = content.tuning.cooling
-  let bestStars: BestStars = loadProgress(saveStore.load(), content.labs)
+  let progress: Progress = loadProgress(saveStore.load(), content)
   let attempt: AttemptProgress | undefined
   let cupContents: BlindCupContent[] = []
   /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
@@ -117,25 +131,29 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
   /** The Lineup's NPC Cuppers in Seat order; throws a GameRuleError naming the first problem. */
   function seatSessionLineup(lab: LabContent, session: CuppingSessionContent, lineup: readonly string[]): NpcCupperContent[] {
     assertTutorialLineup(session, content.npcCuppers, lineup)
-    return seatLineup(content.npcCuppers, lab.seats, lineup)
+    return seatLineup(content.npcCuppers, progress.unlockedNpcCuppers, lab.seats, lineup)
   }
 
   return {
     getLabMap() {
-      return labMap(content.labs, bestStars)
+      return labMap(content.labs, progress.bestStars)
     },
     getLineupOptions(sessionId) {
       const { lab, session } = findCuppingSession(sessionId)
       return {
         seats: lab.seats,
-        npcCuppers: content.npcCuppers.filter(isUnlocked).map(summarize),
-        prefilledLineup: session.tutorial && seatLineup(content.npcCuppers, lab.seats, session.tutorial.lineup).map(summarize),
+        npcCuppers: content.npcCuppers.filter((npc) => progress.unlockedNpcCuppers.has(npc.id)).map(summarize),
+        prefilledLineup:
+          session.tutorial &&
+          seatLineup(content.npcCuppers, progress.unlockedNpcCuppers, lab.seats, session.tutorial.lineup).map(summarize),
       }
     },
     startAttempt(sessionId, lineup) {
       const { lab, session } = findCuppingSession(sessionId)
-      if (!isLabUnlocked(lab, bestStars)) {
-        throw new GameRuleError(`${lab.name} is locked: it needs ${lab.starsToUnlock} Stars and you have ${totalStars(bestStars)}`)
+      if (!isLabUnlocked(lab, progress.bestStars)) {
+        throw new GameRuleError(
+          `${lab.name} is locked: it needs ${lab.starsToUnlock} Stars and you have ${totalStars(progress.bestStars)}`,
+        )
       }
       const letters = session.cups.map((cup) => cup.letter)
       seated = seatSessionLineup(lab, session, lineup).map((npc) => ({
@@ -222,13 +240,28 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         })),
       )
       attempt = undefined
-      const recorded = recordAttempt(content.labs, bestStars, scored.sessionId, scored.stars)
-      bestStars = recorded.best
-      saveStore.save(serializeProgress(bestStars))
+      const recorded = recordAttempt(content, progress, {
+        sessionId: scored.sessionId,
+        stars: scored.stars,
+        shownBiases: seated.map(({ npc }, seat) => ({
+          npc,
+          bias: biasShown(
+            npc,
+            scored.cups.map((cup) => ({ referenceScore: cup.referenceScore, scoreCard: cup.npcScoreCards[seat]!.scoreCard })),
+          ),
+        })),
+      })
+      progress = recorded.progress
+      saveStore.save(serializeProgress(progress))
       return {
         ...scored,
         newBest: recorded.newBest,
         unlockedLabs: recorded.unlockedLabs.map(({ id, name }) => ({ id, name })),
+        unlockedNpcCuppers: recorded.unlockedNpcCuppers.map((npc) => ({
+          ...summarize(npc),
+          unlock: describeUnlock(npc.unlock, content.labs),
+        })),
+        journalDiscoveries: recorded.discoveries.map(({ npc, attribute, bias }) => ({ ...summarize(npc), attribute, bias })),
       }
     },
     leaveLab() {
@@ -255,6 +288,9 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
         canSubmit: cups.every((cup) => cup.scoreCardComplete),
         tutorialPrompt: findCuppingSession(attempt.sessionId).session.tutorial && tutorialPrompt(cups),
       }
+    },
+    getCupperJournal() {
+      return cupperJournal(content, progress)
     },
   }
 }

@@ -4,6 +4,7 @@ import { createGameCore, GameRuleError } from '../core'
 import type {
   AttemptState,
   Attribute,
+  CupperJournalEntry,
   CuppingSessionSummary,
   CuppingStep,
   LabMap,
@@ -51,6 +52,10 @@ export interface OpenedSession {
 interface GameStore {
   /** Every Lab and Cupping Session with the Stars earned, as of the last Submit. */
   labMap: LabMap
+  /** The Cupper Journal's entries, as of the last Submit. */
+  journal: CupperJournalEntry[]
+  /** Whether the Player is browsing the Cupper Journal, from the Lab Map or the Lineup screen. */
+  journalOpen: boolean
   /** The Cupping Session picked on the Lab Map, or null while on the Lab Map. */
   session: OpenedSession | null
   /** The NPC Cuppers picked for the next Attempt, in Seat order. */
@@ -74,6 +79,8 @@ interface GameStore {
   confirmingLeave: boolean
   /** Goes from the Lab Map to the Lineup screen for a Cupping Session, or straight into the tutorial's pre-filled Lineup. */
   openSession(session: CuppingSessionSummary): void
+  openJournal(): void
+  closeJournal(): void
   /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
   toggleLineup(npcId: string): void
   /** Starts an Attempt with the chosen Lineup. */
@@ -136,6 +143,8 @@ function startPrefilledLineup(set: (partial: Partial<GameStore>) => void, get: (
 
 export const useGameStore = create<GameStore>((set, get) => ({
   labMap: core.getLabMap(),
+  journal: core.getCupperJournal(),
+  journalOpen: false,
   session: null,
   lineup: [],
   lineupRejection: null,
@@ -151,6 +160,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ session: { id, name, lineupOptions: core.getLineupOptions(id) }, lineup: [], lineupRejection: null, rejection: null })
     startPrefilledLineup(set, get)
   },
+  openJournal: () => set({ journalOpen: true }),
+  closeJournal: () => set({ journalOpen: false }),
   toggleLineup(npcId) {
     const { lineup } = get()
     const picked = lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId]
@@ -195,7 +206,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       reveal = core.submit()
     })
     if (rejection) return set({ rejection })
-    set({ ...endCuppingView(), reveal, labMap: core.getLabMap() })
+    set({ ...endCuppingView(), reveal, labMap: core.getLabMap(), journal: core.getCupperJournal() })
   },
   cupAgain() {
     const session = get().session!

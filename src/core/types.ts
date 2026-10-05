@@ -96,8 +96,14 @@ export interface LabContent {
   sessions: CuppingSessionContent[]
 }
 
-/** How an NPC Cupper becomes available for a Lineup. */
-export type UnlockRule = { kind: 'starter' } | { kind: 'total-stars'; stars: number }
+/** How an NPC Cupper becomes available for a Lineup. Once unlocked, they stay unlocked. */
+export type UnlockRule =
+  /** Unlocked from the start. */
+  | { kind: 'starter' }
+  /** Unlocked once total Stars reach `stars`. */
+  | { kind: 'total-stars'; stars: number }
+  /** Unlocked by 3-starring this Cupping Session: the NPC Cupper was impressed by the Player's palate. */
+  | { kind: 'three-stars'; sessionId: string }
 
 /** When an NPC Cupper acts during an Attempt. */
 export interface NpcSchedule {
@@ -113,6 +119,8 @@ export interface NpcSchedule {
 export interface NpcCupperContent {
   id: string
   name: string
+  /** The vague hint about their Personality Bias their Cupper Journal entry starts at, e.g. "loves bright coffees". */
+  journalHint: string
   unlock: UnlockRule
   /** Per-Attribute offset to the Reference Score on their Score Cards; unlisted Attributes are unbiased. */
   personalityBias: Partial<Record<Attribute, number>>
@@ -245,6 +253,39 @@ export interface RevealResult {
   newBest: boolean
   /** The Labs this Attempt's Stars unlocked, in content order; empty when none. */
   unlockedLabs: { id: string; name: string }[]
+  /** The NPC Cuppers this Attempt unlocked, in content order; empty when none. */
+  unlockedNpcCuppers: UnlockedNpcCupper[]
+  /** The Personality Biases this Reveal recorded in the Cupper Journal for the first time; empty when none. */
+  journalDiscoveries: JournalDiscovery[]
+}
+
+/** How an NPC Cupper unlocks, as the Cupper Journal and the Reveal tell it. */
+export type UnlockDescription =
+  | { kind: 'starter' }
+  | { kind: 'total-stars'; stars: number }
+  | { kind: 'three-stars'; sessionId: string; sessionName: string }
+
+/** An NPC Cupper an Attempt unlocked, announced at the Reveal. */
+export interface UnlockedNpcCupper extends NpcCupperSummary {
+  unlock: UnlockDescription
+}
+
+/** A Personality Bias recorded in an NPC Cupper's Cupper Journal entry because a Reveal showed it. */
+export interface JournalDiscovery extends NpcCupperSummary {
+  attribute: Attribute
+  /** Cups their Score Cards add to the Reference Score for this Attribute; negative when they under-rate it. */
+  bias: number
+}
+
+/** The Player's record of one NPC Cupper. */
+export interface CupperJournalEntry extends NpcCupperSummary {
+  /** Whether the Player can seat them in a Lineup. */
+  unlocked: boolean
+  unlock: UnlockDescription
+  /** The vague hint about their Personality Bias the entry starts at. */
+  hint: string
+  /** The Personality Bias Reveals have shown so far, per Attribute; Attributes not yet shown are absent. */
+  discoveredBias: Partial<Record<Attribute, number>>
 }
 
 /** A Cupping Session on the Lab Map. */

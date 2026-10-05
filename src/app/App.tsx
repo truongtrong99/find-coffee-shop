@@ -2,7 +2,18 @@ import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { content } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { AttemptState, Attribute, BlindCupState, CuppingStep, LineupOptions, RevealedCup, StarCount, TutorialPrompt } from '../core'
+import type {
+  AttemptState,
+  Attribute,
+  BlindCupState,
+  CupperJournalEntry,
+  CuppingStep,
+  LineupOptions,
+  RevealedCup,
+  StarCount,
+  TutorialPrompt,
+  UnlockDescription,
+} from '../core'
 import { ATTRIBUTE_ICONS, WINDOW_LABELS } from './cueDisplay'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
@@ -70,7 +81,7 @@ function Hud({ session }: { session: OpenedSession }) {
 
 function LabMapScreen() {
   const { totalStars, labs } = useGameStore((s) => s.labMap)
-  const openSession = useGameStore((s) => s.openSession)
+  const { openSession, openJournal } = useGameStore.getState()
   return (
     <div className="backdrop">
       <section className="lab-map" aria-label="Lab Map">
@@ -79,6 +90,9 @@ function LabMapScreen() {
           <p aria-label={`${totalStars} total Stars`}>
             <span className="star-total">★</span> {totalStars} total Stars
           </p>
+          <button className="secondary" onClick={openJournal}>
+            📓 Cupper Journal
+          </button>
         </header>
         {labs.map((lab) => (
           <section key={lab.id} className={lab.unlocked ? 'lab' : 'lab locked'} aria-label={lab.name}>
@@ -97,6 +111,63 @@ function LabMapScreen() {
             </div>
           </section>
         ))}
+      </section>
+    </div>
+  )
+}
+
+/** "Acidity 1 cup high", "Sweetness 2 cups low". */
+function biasText(attribute: Attribute, bias: number) {
+  const cups = Math.abs(bias)
+  return `${ATTRIBUTE_NAMES[attribute]} ${cups} ${cups === 1 ? 'cup' : 'cups'} ${bias > 0 ? 'high' : 'low'}`
+}
+
+function unlockText(unlock: UnlockDescription) {
+  switch (unlock.kind) {
+    case 'starter':
+      return 'Cupping with you from the start'
+    case 'total-stars':
+      return `Unlocks at ${unlock.stars} total Stars`
+    case 'three-stars':
+      return `Unlocks when impressed by your palate: 3-star ${unlock.sessionName}`
+  }
+}
+
+/** The Personality Bias Reveals have shown, or a note that none has been seen yet. */
+function DiscoveredBias({ entry }: { entry: CupperJournalEntry }) {
+  const discovered = ATTRIBUTES.flatMap((attribute) => {
+    const bias = entry.discoveredBias[attribute]
+    return bias === undefined ? [] : [biasText(attribute, bias)]
+  })
+  if (discovered.length === 0) return <span className="journal-bias empty">No Personality Bias seen at a Reveal yet</span>
+  return <span className="journal-bias">Rates {listOf(discovered)}</span>
+}
+
+function CupperJournalScreen() {
+  const journal = useGameStore((s) => s.journal)
+  const closeJournal = useGameStore((s) => s.closeJournal)
+  return (
+    <div className="backdrop">
+      <section className="cupper-journal" aria-label="Cupper Journal">
+        <header>
+          <h2>📓 Cupper Journal</h2>
+          <p>What you know of each NPC Cupper's Personality Bias. Every Reveal can show you more.</p>
+        </header>
+        <ul>
+          {journal.map((entry) => (
+            <li key={entry.id} className={entry.unlocked ? undefined : 'locked'} aria-label={entry.name}>
+              <h3>
+                {entry.name}
+                <small>{entry.unlocked ? unlockText(entry.unlock) : `🔒 ${unlockText(entry.unlock)}`}</small>
+              </h3>
+              <p className="journal-hint">“{entry.hint}”</p>
+              <DiscoveredBias entry={entry} />
+            </li>
+          ))}
+        </ul>
+        <button className="primary" onClick={closeJournal}>
+          Close
+        </button>
       </section>
     </div>
   )
@@ -127,7 +198,8 @@ function LineupScreen({ lineupOptions: { seats, npcCuppers } }: { lineupOptions:
   const lineup = useGameStore((s) => s.lineup)
   const lineupRejection = useGameStore((s) => s.lineupRejection)
   const rejection = useGameStore((s) => s.rejection)
-  const { toggleLineup, startAttempt, leaveLab } = useGameStore.getState()
+  const journal = useGameStore((s) => s.journal)
+  const { toggleLineup, startAttempt, leaveLab, openJournal } = useGameStore.getState()
   const problem = lineupRejection ?? rejection
   return (
     <div className="backdrop">
@@ -139,10 +211,16 @@ function LineupScreen({ lineupOptions: { seats, npcCuppers } }: { lineupOptions:
         <div className="lineup-picks" role="group" aria-label="NPC Cuppers">
           {npcCuppers.map((npc) => {
             const seat = lineup.indexOf(npc.id)
+            const entry = journal.find((e) => e.id === npc.id)
             return (
               <button key={npc.id} aria-pressed={seat !== -1} onClick={() => toggleLineup(npc.id)}>
                 {npc.name}
                 <small>{seat === -1 ? 'Not seated' : `Seat ${seat + 1}`}</small>
+                {entry && (
+                  <small className="journal-entry">
+                    “{entry.hint}” <DiscoveredBias entry={entry} />
+                  </small>
+                )}
               </button>
             )
           })}
@@ -155,9 +233,14 @@ function LineupScreen({ lineupOptions: { seats, npcCuppers } }: { lineupOptions:
         <button className="primary" disabled={lineupRejection !== null} onClick={startAttempt}>
           Start cupping
         </button>
-        <button className="secondary" onClick={leaveLab}>
-          Leave Lab
-        </button>
+        <div className="choices">
+          <button className="secondary" onClick={openJournal}>
+            📓 Cupper Journal
+          </button>
+          <button className="secondary" onClick={leaveLab}>
+            Leave Lab
+          </button>
+        </div>
       </section>
     </div>
   )
@@ -475,6 +558,18 @@ function Reveal() {
               🔓 {lab.name} unlocked!
             </p>
           ))}
+          {reveal.unlockedNpcCuppers.map((npc) => (
+            <p key={npc.id} className="new-best">
+              {npc.unlock.kind === 'three-stars'
+                ? `🔓 ${npc.name} was impressed by your palate and can now join your Lineup!`
+                : `🔓 ${npc.name} can now join your Lineup!`}
+            </p>
+          ))}
+          {reveal.journalDiscoveries.map((discovery) => (
+            <p key={`${discovery.id}-${discovery.attribute}`} className="journal-discovery">
+              📓 Cupper Journal: {discovery.name} rates {biasText(discovery.attribute, discovery.bias)}
+            </p>
+          ))}
           <p>
             {reveal.calibrationPoints} of {reveal.maxCalibrationPoints} Calibration Points
           </p>
@@ -503,6 +598,7 @@ export function App() {
   const session = useGameStore((s) => s.session)
   const choosingLineup = useGameStore((s) => s.attempt === null)
   const confirmingLeave = useGameStore((s) => s.confirmingLeave)
+  const journalOpen = useGameStore((s) => s.journalOpen)
   return (
     <>
       <Canvas
@@ -523,6 +619,7 @@ export function App() {
           {confirmingLeave && <LeaveConfirmation />}
         </>
       )}
+      {journalOpen && <CupperJournalScreen />}
     </>
   )
 }

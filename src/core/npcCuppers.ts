@@ -43,20 +43,23 @@ export function summarize({ id, name }: NpcCupperContent): NpcCupperSummary {
   return { id, name }
 }
 
-/** Until progression tracks Stars, only starter NPC Cuppers are unlocked. */
-export function isUnlocked(npc: NpcCupperContent): boolean {
-  return npc.unlock.kind === 'starter'
-}
-
-/** The Lineup's NPC Cuppers in Seat order; throws a GameRuleError naming the first problem. */
-export function seatLineup(npcCuppers: readonly NpcCupperContent[], seats: number, lineup: readonly string[]): NpcCupperContent[] {
+/**
+ * The Lineup's NPC Cuppers in Seat order, given the ids of those unlocked; throws a GameRuleError naming the first
+ * problem.
+ */
+export function seatLineup(
+  npcCuppers: readonly NpcCupperContent[],
+  unlocked: ReadonlySet<string>,
+  seats: number,
+  lineup: readonly string[],
+): NpcCupperContent[] {
   if (lineup.length > seats) {
     throw new GameRuleError(`A Lineup of ${lineup.length} NPC Cuppers doesn't fit this Lab's ${seats} Seats`)
   }
   return lineup.map((id, seat) => {
     const npc = npcCuppers.find((n) => n.id === id)
     if (!npc) throw new GameRuleError(`There is no NPC Cupper "${id}"`)
-    if (!isUnlocked(npc)) throw new GameRuleError(`${npc.name} is still locked`)
+    if (!unlocked.has(npc.id)) throw new GameRuleError(`${npc.name} is still locked`)
     if (lineup.indexOf(id) !== seat) throw new GameRuleError(`${npc.name} can only fill one Seat`)
     return npc
   })

@@ -32,7 +32,8 @@ export interface TestTuningOverrides {
 /**
  * Small fixture content for facade tests; independent of the shipped v1 content. Lab 1's first Cupping Session is
  * the tutorial. Lab 2 and Lab 3 unlock at the spec's 8 and 18 total Stars: Lab 1's four Cupping Sessions earn at
- * most 12, Lab 2's two another 6.
+ * most 12, Lab 2's two another 6. Biscuit unlocks at 6 total Stars, and Saffron by 3-starring Lab 1's
+ * "Second Test Session".
  */
 export function makeTestContent({
   cooling = {},
@@ -74,6 +75,7 @@ export function makeTestContent({
       {
         id: 'pip',
         name: 'Pip',
+        journalHint: "Pip's hint",
         unlock: { kind: 'starter' },
         personalityBias: { acidity: 2, sweetness: -1 },
         schedule: { secondsBetweenSteps: 5, slurpTemperatures: [70] },
@@ -81,6 +83,7 @@ export function makeTestContent({
       {
         id: 'mochi',
         name: 'Mochi',
+        journalHint: "Mochi's hint",
         unlock: { kind: 'starter' },
         personalityBias: { body: 1 },
         schedule: { secondsBetweenSteps: 4, slurpTemperatures: [50] },
@@ -88,6 +91,7 @@ export function makeTestContent({
       {
         id: 'juniper',
         name: 'Juniper',
+        journalHint: "Juniper's hint",
         unlock: { kind: 'starter' },
         personalityBias: { aroma: -3, flavor: 1 },
         schedule: { secondsBetweenSteps: 6, slurpTemperatures: [65, 40] },
@@ -95,9 +99,18 @@ export function makeTestContent({
       {
         id: 'biscuit',
         name: 'Biscuit',
+        journalHint: "Biscuit's hint",
         unlock: { kind: 'total-stars', stars: 6 },
         personalityBias: { flavor: 1 },
         schedule: { secondsBetweenSteps: 5, slurpTemperatures: [60] },
+      },
+      {
+        id: 'saffron',
+        name: 'Saffron',
+        journalHint: "Saffron's hint",
+        unlock: { kind: 'three-stars', sessionId: 'lab-1-session-2' },
+        personalityBias: { sweetness: 1 },
+        schedule: { secondsBetweenSteps: 5, slurpTemperatures: [45] },
       },
     ],
     labs: [

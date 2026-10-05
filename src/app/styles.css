@@ -585,6 +585,7 @@ body,
 
 .lineup-picks button {
   min-height: 64px;
+  padding: 8px;
   border: 2px solid #4a3222;
   border-radius: 14px;
   background: #fff;
@@ -648,6 +649,7 @@ body,
 }
 
 .lab-map,
+.cupper-journal,
 .leave-confirmation {
   display: flex;
   flex-direction: column;
@@ -663,12 +665,19 @@ body,
   box-shadow: 0 8px 24px rgba(74, 50, 34, 0.35);
 }
 
-.lab-map header {
+.lab-map header,
+.cupper-journal header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   text-align: center;
 }
 
 .lab-map h2,
 .lab-map header p,
+.cupper-journal h2,
+.cupper-journal header p,
 .lab h3 {
   margin: 0;
 }
@@ -794,4 +803,72 @@ body,
   .panel .prompted {
     animation: none;
   }
+}
+
+.journal-discovery {
+  font-weight: 700;
+  color: #7a5f4a;
+}
+
+.cupper-journal ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cupper-journal li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.cupper-journal li.locked {
+  background: #f3ebe0;
+}
+
+.cupper-journal h3,
+.cupper-journal li p {
+  margin: 0;
+}
+
+.cupper-journal h3 small {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a0785a;
+}
+
+.journal-hint {
+  font-style: italic;
+}
+
+.journal-bias {
+  font-size: 13px;
+  font-weight: 700;
+  color: #e07a5f;
+}
+
+.journal-bias.empty {
+  font-weight: 600;
+  color: #b9a08c;
+}
+
+.lineup-picks button .journal-entry {
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.lineup-picks button .journal-entry .journal-bias {
+  display: block;
+  font-style: normal;
+}
+
+.lineup-picks button[aria-pressed='true'] .journal-bias {
+  color: #f6c9b9;
 }

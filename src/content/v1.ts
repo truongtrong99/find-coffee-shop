@@ -99,7 +99,8 @@ function asTutorial([first, ...rest]: CuppingSessionContent[], lineup: string[])
 
 /**
  * v1 content so far: 3 Labs of placeholder Cupping Sessions with 3, 4 and 5 Blind Cups, Lab 1's first being the
- * guided tutorial, and the 2 starter NPC Cuppers, both seated in it.
+ * guided tutorial, and 7 NPC Cuppers: the 2 starters, both seated in the tutorial, 3 unlocking at 6, 12 and 24 total
+ * Stars, and 2 impressed by the Player's palate in Lab 1's and Lab 2's finales.
  */
 export const content: GameContent = {
   tuning: {
@@ -139,8 +140,8 @@ export const content: GameContent = {
     {
       id: 'pip',
       name: 'Pip',
+      journalHint: 'Loves bright coffees.',
       unlock: { kind: 'starter' },
-      // Loves bright coffees.
       personalityBias: { acidity: 1, body: -1 },
       // Impatient: rushes through the steps and slurps while the cups are still hot.
       schedule: { secondsBetweenSteps: 3, slurpTemperatures: [70, 58] },
@@ -148,11 +149,53 @@ export const content: GameContent = {
     {
       id: 'mochi',
       name: 'Mochi',
+      journalHint: 'Has a sweet tooth.',
       unlock: { kind: 'starter' },
-      // Has a sweet tooth.
       personalityBias: { sweetness: 1, aroma: 1 },
       // Patient: takes their time and waits for the cups to cool.
       schedule: { secondsBetweenSteps: 6, slurpTemperatures: [55, 42, 34] },
+    },
+    {
+      id: 'biscuit',
+      name: 'Biscuit',
+      journalHint: 'Likes a coffee with some weight to it.',
+      unlock: { kind: 'total-stars', stars: 6 },
+      personalityBias: { body: 1, acidity: -1 },
+      schedule: { secondsBetweenSteps: 4, slurpTemperatures: [62, 45] },
+    },
+    {
+      id: 'juniper',
+      name: 'Juniper',
+      journalHint: 'Not one for sugary cups.',
+      unlock: { kind: 'three-stars', sessionId: 'lab-1-session-4' },
+      personalityBias: { sweetness: -1 },
+      schedule: { secondsBetweenSteps: 5, slurpTemperatures: [57, 40] },
+    },
+    {
+      id: 'clover',
+      name: 'Clover',
+      journalHint: 'Rarely as impressed as everyone else.',
+      unlock: { kind: 'total-stars', stars: 12 },
+      personalityBias: { flavor: -1, aroma: -1 },
+      // Patient: waits for the cups to cool.
+      schedule: { secondsBetweenSteps: 6, slurpTemperatures: [50, 38] },
+    },
+    {
+      id: 'hazel',
+      name: 'Hazel',
+      journalHint: 'Hard to win over by smell alone.',
+      unlock: { kind: 'three-stars', sessionId: 'lab-2-session-4' },
+      personalityBias: { aroma: -1, flavor: 1 },
+      schedule: { secondsBetweenSteps: 4, slurpTemperatures: [66, 48] },
+    },
+    {
+      id: 'saffron',
+      name: 'Saffron',
+      journalHint: "Can't get enough of a big, fruity cup.",
+      unlock: { kind: 'total-stars', stars: 24 },
+      personalityBias: { flavor: 1, acidity: 1 },
+      // Impatient: slurps while the cups are still hot.
+      schedule: { secondsBetweenSteps: 3, slurpTemperatures: [72, 52] },
     },
   ],
   labs: [

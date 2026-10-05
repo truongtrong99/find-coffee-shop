@@ -1,6 +1,7 @@
 import { nextValidSteps } from './cupping'
 import { GameRuleError } from './errors'
 import { seatLineup } from './npcCuppers'
+import { npcCuppersUnlockedBy } from './progression'
 import { unratedAttributes } from './scoring'
 import { ATTRIBUTES } from './types'
 import type { BlindCupState, CuppingSessionContent, LabContent, NpcCupperContent, TutorialPrompt } from './types'
@@ -21,7 +22,7 @@ export function assertValidTutorials(labs: readonly LabContent[], npcCuppers: re
         throw new GameRuleError(`${problem}: ${lab.name} needs ${lab.starsToUnlock} Stars, so it is locked on first launch`)
       }
       try {
-        seatLineup(npcCuppers, lab.seats, session.tutorial.lineup)
+        seatLineup(npcCuppers, npcCuppersUnlockedBy(npcCuppers, {}), lab.seats, session.tutorial.lineup)
       } catch (error) {
         if (!(error instanceof GameRuleError)) throw error
         throw new GameRuleError(`${problem}: ${error.message}`)

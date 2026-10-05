@@ -1,6 +1,6 @@
-// Play the tutorial in headless Chromium from the Lab Map, following its prompts and screenshotting each stage under
-// screenshots/, then Leave Lab mid-Attempt, check the Stars survive a reload, and choose a Lineup for the next
-// Cupping Session.
+// Browse the Cupper Journal, then play the tutorial in headless Chromium from the Lab Map, following its prompts and
+// screenshotting each stage under screenshots/, then Leave Lab mid-Attempt, check the Stars and the Cupper Journal
+// survive a reload, and choose a Lineup for the next Cupping Session.
 // Usage: npm run play
 // Exits 1 if a check fails or the page logged any console error or uncaught exception.
 // Controls are found by accessible role and name, so restyling doesn't break it.
@@ -33,6 +33,22 @@ await withGamePage(async (page) => {
   await expectState(firstSession.getByText('Tutorial'), 'the first Cupping Session is not marked as the tutorial')
   console.log(`Lab Map: ${await labMap.getByLabel(/total Stars$/).getAttribute('aria-label')}, Lab 2 locked`)
   await screenshot(page, 'screenshots/play-0-lab-map.png')
+
+  // The Cupper Journal, from the Lab Map: an entry per NPC Cupper, locked or not, each starting at a vague hint.
+  const journal = page.getByRole('region', { name: 'Cupper Journal' })
+  const journalEntry = (name) => journal.getByRole('listitem', { name })
+  await labMap.getByRole('button', { name: 'Cupper Journal' }).click()
+  await expectState(journal, 'the Cupper Journal did not open from the Lab Map')
+  const journalSize = await journal.getByRole('listitem').count()
+  assert.ok(journalSize >= 6 && journalSize <= 8, `the Cupper Journal has ${journalSize} NPC Cuppers, not 6–8`)
+  await expectState(journalEntry('Pip').getByText('Loves bright coffees.'), "Pip's Cupper Journal entry does not start at their hint")
+  await expectState(journalEntry('Pip').getByText('No Personality Bias seen'), "Pip's Personality Bias shows before any Reveal")
+  await expectState(journal.getByText('🔒 Unlocks at 6 total Stars'), 'no locked NPC Cupper says the total Stars they unlock at')
+  await expectState(journal.getByText(/🔒 Unlocks when impressed by your palate: 3-star/).first(), 'no locked NPC Cupper says which Cupping Session to 3-star')
+  console.log(`Cupper Journal: ${journalSize} NPC Cuppers`)
+  await screenshot(page, 'screenshots/play-0-cupper-journal.png')
+  await journal.getByRole('button', { name: 'Close' }).click()
+  await expectState(journal, 'the Cupper Journal is still showing after Close', 'detached')
   await firstSession.click()
 
   const panel = page.getByRole('complementary', { name: 'Cupping' })
@@ -95,6 +111,8 @@ await withGamePage(async (page) => {
   }
   const stars = await reveal.getByLabel(/of 3 Stars$/).getAttribute('aria-label')
   console.log(`Reveal: ${stars}, ${await reveal.getByText(/Calibration Points$/).innerText()}`)
+  // NPC Score Cards carry random noise, so a Reveal may or may not show a Personality Bias.
+  for (const discovery of await reveal.getByText(/^📓 Cupper Journal:/).allInnerTexts()) console.log(`Reveal: ${discovery}`)
   await screenshot(page, 'screenshots/play-4-reveal.png')
 
   // Note each cup's Reference Score from the Reveal, to calibrate against in the next Attempt.
@@ -146,18 +164,32 @@ await withGamePage(async (page) => {
   const bestStars = () => labMap.getByRole('button', { name: sessionName }).getByLabel(/of 3 Stars$/).getAttribute('aria-label')
   assert.equal(await bestStars(), '3 of 3 Stars', 'the Lab Map does not show the best Stars')
   console.log(`Left the Lab mid-Attempt: ${sessionName} keeps ${await bestStars()}`)
+  const journalText = async () => {
+    await labMap.getByRole('button', { name: 'Cupper Journal' }).click()
+    const text = await journal.getByRole('list').innerText()
+    await journal.getByRole('button', { name: 'Close' }).click()
+    return text
+  }
+  const journalBeforeReload = await journalText()
 
-  // Progress is saved: a reload shows the same best Stars.
+  // Progress is saved: a reload shows the same best Stars and Cupper Journal.
   await page.reload()
   await expectState(labMap, 'the Lab Map did not appear after a reload')
   assert.equal(await bestStars(), '3 of 3 Stars', 'best Stars were not saved across a reload')
-  console.log(`Reloaded: ${sessionName} still has ${await bestStars()}`)
+  assert.equal(await journalText(), journalBeforeReload, 'the Cupper Journal was not saved across a reload')
+  console.log(`Reloaded: ${sessionName} still has ${await bestStars()}, and the Cupper Journal is unchanged`)
   await screenshot(page, 'screenshots/play-6-lab-map-after.png')
 
   // Any other Cupping Session asks for a Lineup and has no tutorial prompts.
   await labMap.getByRole('region').first().getByRole('button').nth(1).click()
   await expectState(lineup, 'the Lineup did not appear for a Cupping Session after the tutorial')
-  await lineup.getByRole('group', { name: 'NPC Cuppers' }).getByRole('button').first().click()
+  const picks = lineup.getByRole('group', { name: 'NPC Cuppers' })
+  await expectState(picks.getByText('Loves bright coffees.'), "the Lineup does not show Pip's Cupper Journal entry")
+  await lineup.getByRole('button', { name: 'Cupper Journal' }).click()
+  await expectState(journal, 'the Cupper Journal did not open from the Lineup')
+  await screenshot(page, 'screenshots/play-7-lineup-journal.png')
+  await journal.getByRole('button', { name: 'Close' }).click()
+  await picks.getByRole('button').first().click()
   await lineup.getByRole('button', { name: 'Start cupping' }).click()
   await expectState(cupPicker, 'the Attempt did not start from the Lineup')
   assert.equal(await tutorial.count(), 0, 'a Cupping Session other than the tutorial shows tutorial prompts')

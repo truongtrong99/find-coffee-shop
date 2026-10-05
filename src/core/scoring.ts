@@ -55,7 +55,7 @@ export function mapAttributes<T>(fn: (attribute: Attribute) => T): Record<Attrib
 export function revealAttempt(
   sessionId: string,
   cups: readonly { content: BlindCupContent; scoreCard: ScoreCard; npcScoreCards: NpcScoreCard[] }[],
-): Omit<RevealResult, 'newBest' | 'unlockedLabs'> {
+): Omit<RevealResult, 'newBest' | 'unlockedLabs' | 'unlockedNpcCuppers' | 'journalDiscoveries'> {
   const revealed = cups.map(({ content: cup, scoreCard: submitted, npcScoreCards }) => {
     const scoreCard = mapAttributes((attribute) => submitted[attribute]!)
     return {

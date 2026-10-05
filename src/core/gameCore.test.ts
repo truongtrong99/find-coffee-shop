@@ -1162,9 +1162,9 @@ describe('saving progress', () => {
     const saveStore = createMemorySaveStore()
     const before = gameWith(saveStore)
     playFor(before, 'lab-1-session-1', 3)
-    playFor(before, 'lab-1-session-2', 2)
+    playFor(before, 'lab-1-session-3', 2)
     const content = makeTestContent()
-    content.labs[0]!.sessions = content.labs[0]!.sessions.filter((session) => session.id !== 'lab-1-session-2')
+    content.labs[0]!.sessions = content.labs[0]!.sessions.filter((session) => session.id !== 'lab-1-session-3')
 
     const after = createGameCore({ content, saveStore, random: createSeededRandom(1) })
 
@@ -1172,8 +1172,244 @@ describe('saving progress', () => {
     expect(after.getLabMap().labs[0]!.sessions.map((s) => [s.id, s.bestStars])).toEqual([
       ['lab-1-tutorial', 0],
       ['lab-1-session-1', 3],
-      ['lab-1-session-3', 0],
+      ['lab-1-session-2', 0],
     ])
+  })
+})
+
+describe('unlocking NPC Cuppers', () => {
+  /** The NPC Cuppers the Lineup screen offers, by id. */
+  const lineupIds = (game: ReturnType<typeof newGame>) => game.getLineupOptions(SESSION).npcCuppers.map((npc) => npc.id)
+
+  it('starts with only the starter NPC Cuppers unlocked', () => {
+    expect(lineupIds(newGame())).toEqual(['pip', 'mochi', 'juniper'])
+  })
+
+  it('unlocks an NPC Cupper at their total Stars: Biscuit at 6, not 5', () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-1', 3)
+    playFor(game, 'lab-1-session-3', 2)
+
+    expect(game.getLabMap().totalStars).toBe(5)
+    expect(lineupIds(game)).not.toContain('biscuit')
+
+    playFor(game, 'lab-1-session-3', 3)
+
+    expect(lineupIds(game)).toEqual(['pip', 'mochi', 'juniper', 'biscuit'])
+    game.startAttempt(SESSION, ['biscuit'])
+    expect(game.getAttempt()!.npcCuppers.map((npc) => npc.id)).toEqual(['biscuit'])
+  })
+
+  it("unlocks an NPC Cupper impressed by the Player's palate on 3-starring their Cupping Session, not 2-starring it", () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-2', 2)
+
+    expect(lineupIds(game)).not.toContain('saffron')
+
+    playFor(game, 'lab-1-session-2', 3)
+
+    expect(lineupIds(game)).toContain('saffron')
+  })
+
+  it('does not unlock them for 3-starring any other Cupping Session, however many Stars that earns', () => {
+    const game = newGame()
+    for (const session of ['lab-1-tutorial', 'lab-1-session-1', 'lab-1-session-3']) playFor(game, session, 3)
+
+    expect(game.getLabMap().totalStars).toBe(9)
+    expect(lineupIds(game)).toEqual(['pip', 'mochi', 'juniper', 'biscuit'])
+  })
+
+  it('the Reveal announces each NPC Cupper it unlocked and how, once', () => {
+    const game = newGame()
+    expect(playFor(game, 'lab-1-session-1', 3).unlockedNpcCuppers).toEqual([])
+    playFor(game, 'lab-1-session-3', 1)
+
+    // 3-starring Second Test Session takes total Stars from 4 to 7, past Biscuit's 6, and impresses Saffron.
+    expect(playFor(game, 'lab-1-session-2', 3).unlockedNpcCuppers).toEqual([
+      { id: 'biscuit', name: 'Biscuit', unlock: { kind: 'total-stars', stars: 6 } },
+      {
+        id: 'saffron',
+        name: 'Saffron',
+        unlock: { kind: 'three-stars', sessionId: 'lab-1-session-2', sessionName: 'Second Test Session' },
+      },
+    ])
+    expect(playFor(game, 'lab-1-session-3', 3).unlockedNpcCuppers).toEqual([])
+  })
+
+  it('keeps unlocked NPC Cuppers through the save store, even if the content later asks more of them', () => {
+    const saveStore = createMemorySaveStore()
+    const first = createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) })
+    playFor(first, 'lab-1-session-1', 3)
+    playFor(first, 'lab-1-session-3', 3)
+    const content = makeTestContent()
+    content.npcCuppers.find((npc) => npc.id === 'biscuit')!.unlock = { kind: 'total-stars', stars: 12 }
+
+    const reloaded = createGameCore({ content, saveStore, random: createSeededRandom(1) })
+
+    expect(lineupIds(reloaded)).toContain('biscuit')
+  })
+
+  it('unlocks the NPC Cuppers whose rule a save\'s Stars already meet, even a save from before NPC Cuppers unlocked', () => {
+    const saved = JSON.stringify({ version: 1, bestStars: { 'lab-1-session-1': 3, 'lab-1-session-2': 3 } })
+
+    const game = createGameCore({ content: makeTestContent(), saveStore: createMemorySaveStore(saved), random: createSeededRandom(1) })
+
+    expect(lineupIds(game)).toEqual(['pip', 'mochi', 'juniper', 'biscuit', 'saffron'])
+  })
+
+  it('rejects content whose NPC Cupper unlocks by 3-starring a Cupping Session it does not have', () => {
+    const content = makeTestContent()
+    content.npcCuppers.find((npc) => npc.id === 'saffron')!.unlock = { kind: 'three-stars', sessionId: 'nowhere' }
+    const create = () => createGameCore({ content, saveStore: createMemorySaveStore(), random: createSeededRandom(1) })
+
+    expect(create).toThrow(GameRuleError)
+    expect(create).toThrow(/Saffron.*no Cupping Session "nowhere"/)
+  })
+})
+
+describe('the Cupper Journal', () => {
+  /** Plays an Attempt of the first test Cupping Session with this Lineup, rating every Attribute 3 cups. */
+  function revealWith(game: ReturnType<typeof newGame>, lineup: string[]) {
+    game.startAttempt(SESSION, lineup)
+    for (const letter of ['A', 'B', 'C']) for (const attribute of ATTRIBUTES) game.setRating(letter, attribute, 3)
+    return game.submit()
+  }
+
+  const entry = (game: ReturnType<typeof newGame>, id: string) => game.getCupperJournal().find((e) => e.id === id)!
+
+  it('has an entry per NPC Cupper, locked or not, in content order, each starting at their vague hint', () => {
+    expect(newGame().getCupperJournal()).toEqual([
+      { id: 'pip', name: 'Pip', unlocked: true, unlock: { kind: 'starter' }, hint: "Pip's hint", discoveredBias: {} },
+      { id: 'mochi', name: 'Mochi', unlocked: true, unlock: { kind: 'starter' }, hint: "Mochi's hint", discoveredBias: {} },
+      { id: 'juniper', name: 'Juniper', unlocked: true, unlock: { kind: 'starter' }, hint: "Juniper's hint", discoveredBias: {} },
+      {
+        id: 'biscuit',
+        name: 'Biscuit',
+        unlocked: false,
+        unlock: { kind: 'total-stars', stars: 6 },
+        hint: "Biscuit's hint",
+        discoveredBias: {},
+      },
+      {
+        id: 'saffron',
+        name: 'Saffron',
+        unlocked: false,
+        unlock: { kind: 'three-stars', sessionId: 'lab-1-session-2', sessionName: 'Second Test Session' },
+        hint: "Saffron's hint",
+        discoveredBias: {},
+      },
+    ])
+  })
+
+  it('shows an NPC Cupper as unlocked once they are', () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-2', 3)
+
+    expect(entry(game, 'saffron').unlocked).toBe(true)
+  })
+
+  // Reference Scores: A 4/3/4/2/3, B 2/5/1/5/4, C 3/3/3/3/3 (Aroma/Flavor/Acidity/Body/Sweetness).
+  // Pip: Acidity +2, Sweetness -1, so with no noise rates Acidity 5/3/5 and Sweetness 2/3/2. Cup A's Acidity is
+  // held to 5 cups; Cups B and C show the +2. Every cup shows the -1 on Sweetness.
+  it('records the Personality Bias a Reveal shows: Pip rates Acidity 2 cups high and Sweetness 1 cup low', () => {
+    const game = newGame()
+
+    const reveal = revealWith(game, ['pip'])
+
+    expect(entry(game, 'pip').discoveredBias).toEqual({ acidity: 2, sweetness: -1 })
+    expect(entry(game, 'pip').hint).toBe("Pip's hint")
+    expect(reveal.journalDiscoveries).toEqual([
+      { id: 'pip', name: 'Pip', attribute: 'acidity', bias: 2 },
+      { id: 'pip', name: 'Pip', attribute: 'sweetness', bias: -1 },
+    ])
+  })
+
+  it('records the Personality Bias of every NPC Cupper in the Lineup, and nobody else', () => {
+    const game = newGame()
+
+    revealWith(game, ['mochi', 'juniper'])
+
+    // Juniper's Aroma -3 shows on Cup A (4 → 1); Cups B and C would go below 1 cup.
+    expect(game.getCupperJournal().map((e) => [e.id, e.discoveredBias])).toEqual([
+      ['pip', {}],
+      ['mochi', { body: 1 }],
+      ['juniper', { aroma: -3, flavor: 1 }],
+      ['biscuit', {}],
+      ['saffron', {}],
+    ])
+  })
+
+  it('announces a discovery once: a later Reveal showing the same Personality Bias adds nothing new', () => {
+    const game = newGame()
+    revealWith(game, ['pip'])
+
+    expect(revealWith(game, ['pip', 'mochi']).journalDiscoveries).toEqual([{ id: 'mochi', name: 'Mochi', attribute: 'body', bias: 1 }])
+    expect(entry(game, 'pip').discoveredBias).toEqual({ acidity: 2, sweetness: -1 })
+  })
+
+  it('records nothing when Leave Lab discards the Attempt', () => {
+    const game = newGame()
+    game.startAttempt(SESSION, ['pip'])
+
+    game.leaveLab()
+
+    expect(entry(game, 'pip').discoveredBias).toEqual({})
+  })
+
+  it('does not record a Personality Bias the 1–5 cups hide: Body +4 on cups with a Body of 2, 5 and 3', () => {
+    const content = makeTestContent()
+    content.npcCuppers.find((npc) => npc.id === 'pip')!.personalityBias = { body: 4 }
+    const game = createGameCore({ content, saveStore: createMemorySaveStore(), random: createSeededRandom(1) })
+
+    const reveal = revealWith(game, ['pip'])
+
+    expect(reveal.cups.map((cup) => cup.npcScoreCards[0]!.scoreCard.body)).toEqual([5, 5, 5])
+    expect(entry(game, 'pip').discoveredBias).toEqual({})
+  })
+
+  it('keeps discoveries through the save store', () => {
+    const saveStore = createMemorySaveStore()
+    const first = createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) })
+    revealWith(first, ['pip'])
+
+    const reloaded = createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) })
+
+    expect(reloaded.getCupperJournal()).toEqual(first.getCupperJournal())
+    expect(entry(reloaded, 'pip').discoveredBias).toEqual({ acidity: 2, sweetness: -1 })
+  })
+
+  it('drops a saved discovery once the content gives the NPC Cupper a different Personality Bias', () => {
+    const saveStore = createMemorySaveStore()
+    revealWith(createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) }), ['pip'])
+    const content = makeTestContent()
+    content.npcCuppers.find((npc) => npc.id === 'pip')!.personalityBias = { acidity: 1, sweetness: -1 }
+
+    const reloaded = createGameCore({ content, saveStore, random: createSeededRandom(1) })
+
+    expect(entry(reloaded, 'pip').discoveredBias).toEqual({ sweetness: -1 })
+  })
+
+  describe('with seeded noise', () => {
+    const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1)
+    const pipAfterOneReveal = (seed: number) => {
+      const game = newGame({ npcScoreNoise: 1 }, seed)
+      revealWith(game, ['pip'])
+      return entry(game, 'pip').discoveredBias
+    }
+
+    it('records a Personality Bias only when the Score Cards show it, so one Reveal is sometimes not enough', () => {
+      const acidity = SEEDS.map((seed) => pipAfterOneReveal(seed).acidity)
+
+      expect(acidity).toContain(2)
+      expect(acidity).toContain(undefined)
+    })
+
+    it('only ever records the true Personality Bias, never one on an Attribute the NPC Cupper rates fairly', () => {
+      for (const seed of SEEDS) {
+        const discovered = pipAfterOneReveal(seed)
+        expect({ acidity: 2, sweetness: -1 }).toMatchObject(discovered)
+      }
+    })
   })
 })
 
