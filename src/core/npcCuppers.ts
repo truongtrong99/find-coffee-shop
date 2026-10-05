@@ -61,7 +61,7 @@ export function npcRemark(npc: NpcCupperContent, cup: BlindCupContent, condition
   const attribute = ATTRIBUTES[Math.floor(conditions.random.next() * ATTRIBUTES.length)]!
   const cue = { ...cueFor(cup, 'slurp', attribute, conditions), remarkBy: summarize(npc) }
   if (cue.suggestedRating === undefined) return cue
-  const rating = clampRating(Math.round(cue.suggestedRating + (npc.personalityBias[attribute] ?? 0)))
+  const rating = shiftedByBias(npc, attribute, cue.suggestedRating)
   return { ...cue, note: cup.tastingNotes[attribute][rating], suggestedRating: rating }
 }
 
@@ -103,6 +103,11 @@ export function npcScoreCard(
 ): Record<Attribute, Rating> {
   return mapAttributes((attribute) => {
     const noiseOffset = (random.next() * 2 - 1) * noise
-    return clampRating(Math.round(referenceScore[attribute] + (npc.personalityBias[attribute] ?? 0) + noiseOffset))
+    return shiftedByBias(npc, attribute, referenceScore[attribute] + noiseOffset)
   })
+}
+
+/** A rating of `cups` for this Attribute plus the NPC Cupper's Personality Bias, rounded to whole cups and kept within 1–5. */
+function shiftedByBias(npc: NpcCupperContent, attribute: Attribute, cups: number): Rating {
+  return clampRating(Math.round(cups + (npc.personalityBias[attribute] ?? 0)))
 }

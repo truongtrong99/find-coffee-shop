@@ -276,14 +276,14 @@ describe('NPC remarks as Tasting Cues', () => {
 
     game.advanceClock(10.1)
 
+    // Worked from 90 -> 30 in 240s towards 20: 20 + 70 * 7^(-t/240) at 65s, 70s and 75s.
+    const slurpTemperatures = { A: 61.325, B: 59.684, C: 58.107 }
     const slurps = game.getAttempt()!.npcCuppers[0]!.steps.filter((s) => s.step === 'slurp')
-    for (const [i, letter] of ['A', 'B', 'C'].entries()) {
+    for (const [i, [letter, temperature]] of Object.entries(slurpTemperatures).entries()) {
       const cues = cup(game, letter).cues
-      expect(cues).toHaveLength(1)
-      expect(cues[0]).toMatchObject({ step: 'slurp', remarkBy: PIP, temperature: slurps[i]!.temperature })
-      expect(slurps[i]!.remark).toEqual(cues[0])
+      expect(cues).toEqual([expect.objectContaining({ step: 'slurp', remarkBy: PIP, temperature: expect.closeTo(temperature, 3) })])
+      expect(slurps[i]).toMatchObject({ cupLetter: letter, remark: cues[0] })
     }
-    expect(cup(game, 'A').cues[0]!.temperature).toBeCloseTo(61.325, 3)
   })
 
   it('makes no remark after any Cupping Step but a Slurp', () => {
@@ -365,7 +365,7 @@ describe('NPC remarks as Tasting Cues', () => {
       expect(possible[remark.letter]![remark.attribute]).toContain(remark.suggestedRating)
       expect(remark.note).toMatch(new RegExp(`^${remark.attribute} ${remark.suggestedRating}:`))
     }
-    // Cup B's Acidity 1 can only be skewed up to 2, which Pip says is 4: never the Reference Score.
+    // The seeds reach Cup B's Acidity 1, which can only be skewed up to 2 and which Pip then says is 4.
     expect(remarks.filter((r) => r.letter === 'B' && r.attribute === 'acidity').length).toBeGreaterThan(0)
   })
 

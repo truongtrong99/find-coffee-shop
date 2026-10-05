@@ -111,8 +111,8 @@ interface SeatedNpc {
   id: string
   name: string
   latestStep: PerformedStep | undefined
-  /** Their latest Slurp, which carries their latest remark, and its place among their steps; undefined before one. */
-  latestSlurp: { step: PerformedStep; index: number } | undefined
+  /** The step carrying their latest remark, a Slurp, and its place among their steps; undefined before any. */
+  latestRemark: { step: PerformedStep; index: number } | undefined
 }
 
 /**
@@ -127,7 +127,7 @@ function useSeatedNpcs(): SeatedNpc[] {
   if (npcCuppers) {
     return npcCuppers.map(({ id, name, steps }) => {
       const index = steps.reduce((last, step, i) => (step.remark ? i : last), -1)
-      return { id, name, latestStep: steps.at(-1), latestSlurp: index === -1 ? undefined : { step: steps[index]!, index } }
+      return { id, name, latestStep: steps.at(-1), latestRemark: index === -1 ? undefined : { step: steps[index]!, index } }
     })
   }
   if (!lineupFits || !options) return []
@@ -135,25 +135,25 @@ function useSeatedNpcs(): SeatedNpc[] {
     id,
     name: options.npcCuppers.find((npc) => npc.id === id)?.name ?? id,
     latestStep: undefined,
-    latestSlurp: undefined,
+    latestRemark: undefined,
   }))
 }
 
 /**
- * The remark from an NPC Cupper's latest Slurp while its speech bubble shows, voiced with blips once as it is made.
+ * The step carrying an NPC Cupper's latest remark while its speech bubble shows, voiced with blips once as it is made.
  * Presentation only: the core decides the remark and when it is made.
  */
-function useSpokenRemark(latestSlurp: SeatedNpc['latestSlurp'], voiceHz: number): PerformedStep | undefined {
+function useSpokenRemark(latestRemark: SeatedNpc['latestRemark'], voiceHz: number): PerformedStep | undefined {
   const [shown, setShown] = useState<PerformedStep>()
-  const index = latestSlurp?.index
+  const index = latestRemark?.index
   useEffect(() => {
-    if (!latestSlurp) return setShown(undefined)
-    setShown(latestSlurp.step)
-    speak(latestSlurp.step.remark!.note, voiceHz)
+    if (!latestRemark) return setShown(undefined)
+    setShown(latestRemark.step)
+    speak(latestRemark.step.remark!.note, voiceHz)
     const timer = setTimeout(() => setShown(undefined), REMARK_SHOWN_REAL_SECONDS * 1000)
     return () => clearTimeout(timer)
-    // Keyed on the Slurp's place among their steps: a new remark is a new latest Slurp, while every tick's fresh
-    // snapshot of the same one must not voice it again.
+    // Keyed on the step's place among theirs: a new remark is a new step, while every tick's fresh snapshot of the
+    // same one must not voice it again.
   }, [index])
   return shown
 }
@@ -167,8 +167,8 @@ interface NpcCupperProps extends SeatedNpc {
   showLabels: boolean
 }
 
-function NpcCupper({ name, latestStep, latestSlurp, seat, colorIndex, cups, elapsed, labelLayer, showLabels }: NpcCupperProps) {
-  const speaking = useSpokenRemark(latestSlurp, NPC_VOICES_HZ[colorIndex % NPC_VOICES_HZ.length] ?? NPC_VOICES_HZ[0]!)
+function NpcCupper({ name, latestStep, latestRemark, seat, colorIndex, cups, elapsed, labelLayer, showLabels }: NpcCupperProps) {
+  const speaking = useSpokenRemark(latestRemark, NPC_VOICES_HZ[colorIndex % NPC_VOICES_HZ.length] ?? NPC_VOICES_HZ[0]!)
   const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
   const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1
   const remark = speaking?.remark
@@ -180,7 +180,7 @@ function NpcCupper({ name, latestStep, latestSlurp, seat, colorIndex, cups, elap
       leaning={cupIndex !== -1}
       labelLayer={labelLayer}
       label={
-        showLabels && (
+        (showLabels || remark) && (
           <div className="cupper-tag">
             {remark && (
               <div className="speech-bubble" role="status">
@@ -190,14 +190,16 @@ function NpcCupper({ name, latestStep, latestSlurp, seat, colorIndex, cups, elap
                 </small>
               </div>
             )}
-            <div className={performing ? 'cupper-label performing' : 'cupper-label'}>
-              {name}
-              {performing && (
-                <small>
-                  {STEP_NAMES[performing.step]} · Cup {performing.cupLetter}
-                </small>
-              )}
-            </div>
+            {showLabels && (
+              <div className={performing ? 'cupper-label performing' : 'cupper-label'}>
+                {name}
+                {performing && (
+                  <small>
+                    {STEP_NAMES[performing.step]} · Cup {performing.cupLetter}
+                  </small>
+                )}
+              </div>
+            )}
           </div>
         )
       }

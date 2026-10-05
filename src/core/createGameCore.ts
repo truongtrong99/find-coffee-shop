@@ -106,8 +106,8 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
   let cupContents: BlindCupContent[] = []
   /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
   let seated: { npc: NpcCupperContent; plannedSteps: PerformedStep[] }[] = []
-  /** The Lineup's remarks the clock has yet to reach, oldest first. */
-  let pendingRemarks: { atSeconds: number; cupLetter: string; remark: TastingCue }[] = []
+  /** Game seconds up to which the Lineup's remarks are in the Cue Logs. */
+  let remarksLoggedTo = -Infinity
 
   function windowsAt(temperature: number): Record<Attribute, WindowPosition> {
     return mapAttributes((attribute) => windowPosition(temperature, accuracyWindows[attribute], stoneColdTemperature))
@@ -133,14 +133,20 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
     attempt = { ...attempt!, cups: attempt!.cups.map((c, i) => (i === index ? cup : c)) }
   }
 
-  /** Adds every remark the clock has reached to its cup's Cue Log. */
+  /** Adds every remark made since the last call to its cup's Cue Log, oldest first; at the same moment, in Seat order. */
   function logRemarksMade(): void {
-    while (pendingRemarks.length > 0 && pendingRemarks[0]!.atSeconds <= attempt!.elapsedSeconds) {
-      const { cupLetter, remark } = pendingRemarks.shift()!
+    const { elapsedSeconds } = attempt!
+    const made = seated
+      .flatMap(({ plannedSteps }) => plannedSteps)
+      .filter((step) => step.remark && step.atSeconds > remarksLoggedTo && step.atSeconds <= elapsedSeconds)
+      // Sorting is stable, so remarks made at the same moment keep Seat order.
+      .sort((a, b) => a.atSeconds - b.atSeconds)
+    for (const { cupLetter, remark } of made) {
       const index = cupIndex(cupLetter)
       const cup = attempt!.cups[index]!
-      replaceCup(index, { ...cup, cues: [...cup.cues, remark] })
+      replaceCup(index, { ...cup, cues: [...cup.cues, remark!] })
     }
+    remarksLoggedTo = elapsedSeconds
   }
 
   function findCuppingSession(sessionId: string): { lab: LabContent; session: CuppingSessionContent } {
@@ -187,12 +193,7 @@ export function createGameCore({ content, saveStore, random }: GameCoreDeps): Ga
           npcRemark(npc, cupContents[cupIndex(cupLetter)]!, cueConditionsAt(temperature)),
         ),
       }))
-      // Sorting is stable, so remarks made at the same moment keep Seat order.
-      pendingRemarks = seated
-        .flatMap(({ plannedSteps }) =>
-          plannedSteps.flatMap(({ atSeconds, cupLetter, remark }) => (remark ? [{ atSeconds, cupLetter, remark }] : [])),
-        )
-        .sort((a, b) => a.atSeconds - b.atSeconds)
+      remarksLoggedTo = -Infinity
       attempt = {
         sessionId,
         elapsedSeconds: 0,
