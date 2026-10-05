@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTestContent } from '../content/testContent'
 import type { TestTuningOverrides } from '../content/testContent'
 import { ATTRIBUTES, createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
-import type { Attribute, Rating } from '.'
+import type { Attribute, Rating, SaveStore, StarCount } from '.'
 
 const SESSION = 'lab-1-session-1'
 
@@ -30,6 +30,28 @@ function rateAll(game: ReturnType<typeof newGame>, cards: Record<string, Partial
   for (const [letter, card] of Object.entries(cards)) {
     for (const [attribute, rating] of Object.entries(card)) game.setRating(letter, attribute as Attribute, rating!)
   }
+}
+
+/**
+ * Score Cards for a session earning exactly `exact` exact matches and `offByOne` near-misses,
+ * with every other Attribute off by two (0 points). Attributes are filled cup by cup in Score Card order.
+ */
+function scoreCardsWith(session: string, exact: number, offByOne: number) {
+  const cups = makeTestContent().labs.flatMap((lab) => lab.sessions).find((s) => s.id === session)!.cups
+  let rated = 0
+  return Object.fromEntries(
+    cups.map((cup) => [
+      cup.letter,
+      Object.fromEntries(
+        ATTRIBUTES.map((attribute) => {
+          const reference: Rating = cup.referenceScore[attribute]
+          const offBy = rated < exact ? 0 : rated < exact + offByOne ? 1 : 2
+          rated++
+          return [attribute, reference + offBy <= 5 ? reference + offBy : reference - offBy]
+        }),
+      ),
+    ]),
+  )
 }
 
 describe('starting an Attempt', () => {
@@ -103,6 +125,7 @@ describe('choosing a Lineup', () => {
 
   it('fills up to the Seat count in a Lab with more Seats', () => {
     const game = newGame()
+    unlockLab2(game)
 
     game.startAttempt('lab-2-session-1', ['pip', 'mochi', 'juniper'])
 
@@ -763,7 +786,9 @@ describe('Submit', () => {
 
 describe('Calibration at the Reveal', () => {
   function revealFor(cards: Record<string, Partial<Record<Attribute, number>>>, session = SESSION) {
-    const game = startedGame(session)
+    const game = newGame()
+    unlockLab2(game)
+    game.startAttempt(session, [])
     rateAll(game, cards)
     return game.submit()
   }
@@ -785,27 +810,8 @@ describe('Calibration at the Reveal', () => {
     expect(reveal.maxCalibrationPoints).toBe(45)
   })
 
-  /**
-   * Rates a session so the Player earns exactly `exact` exact matches and `offByOne` near-misses,
-   * with every other Attribute off by two (0 points). Attributes are filled cup by cup in Score Card order.
-   */
   function revealWith(session: string, exact: number, offByOne: number) {
-    const cups = makeTestContent().labs.flatMap((lab) => lab.sessions).find((s) => s.id === session)!.cups
-    let rated = 0
-    const cards = Object.fromEntries(
-      cups.map((cup) => [
-        cup.letter,
-        Object.fromEntries(
-          ATTRIBUTES.map((attribute) => {
-            const reference: Rating = cup.referenceScore[attribute]
-            const offBy = rated < exact ? 0 : rated < exact + offByOne ? 1 : 2
-            rated++
-            return [attribute, reference + offBy <= 5 ? reference + offBy : reference - offBy]
-          }),
-        ),
-      ]),
-    )
-    return revealFor(cards, session)
+    return revealFor(scoreCardsWith(session, exact, offByOne), session)
   }
 
   const FOUR_CUPS = 'lab-2-session-1' // 20 Attributes, 60 Calibration Points at most
@@ -923,5 +929,285 @@ describe('NPC Score Cards at the Reveal', () => {
       expect(mean('body')).toBeGreaterThan(2.5)
       expect(mean('body')).toBeLessThan(3.5)
     })
+  })
+})
+
+describe('the Lab Map', () => {
+  it('lists every Lab and its Cupping Sessions, with no Stars yet and only the first Lab unlocked', () => {
+    expect(newGame().getLabMap()).toEqual({
+      totalStars: 0,
+      labs: [
+        {
+          id: 'lab-1',
+          name: 'Test Lab',
+          starsToUnlock: 0,
+          unlocked: true,
+          sessions: [
+            { id: 'lab-1-session-1', name: 'Test Session', bestStars: 0 },
+            { id: 'lab-1-session-2', name: 'Second Test Session', bestStars: 0 },
+            { id: 'lab-1-session-3', name: 'Third Test Session', bestStars: 0 },
+            { id: 'lab-1-session-4', name: 'Fourth Test Session', bestStars: 0 },
+          ],
+        },
+        {
+          id: 'lab-2',
+          name: 'Test Lab 2',
+          starsToUnlock: 8,
+          unlocked: false,
+          sessions: [
+            { id: 'lab-2-session-1', name: 'Four-cup Test Session', bestStars: 0 },
+            { id: 'lab-2-session-2', name: 'Second Four-cup Test Session', bestStars: 0 },
+          ],
+        },
+        {
+          id: 'lab-3',
+          name: 'Test Lab 3',
+          starsToUnlock: 18,
+          unlocked: false,
+          sessions: [{ id: 'lab-3-session-1', name: 'Three-cup Test Session in Lab 3', bestStars: 0 }],
+        },
+      ],
+    })
+  })
+})
+
+/**
+ * Exact matches and near-misses that earn each Star count, worked out by hand:
+ * 3 cups have 45 Calibration Points at most, 4 cups have 60.
+ */
+const EARNING: Record<number, Record<StarCount, { exact: number; offByOne: number }>> = {
+  // 0 of 45; 23 of 45 is 51%; 32 of 45 is 71%; 45 of 45.
+  3: { 0: { exact: 0, offByOne: 0 }, 1: { exact: 7, offByOne: 2 }, 2: { exact: 10, offByOne: 2 }, 3: { exact: 15, offByOne: 0 } },
+  // 0 of 60; 30 of 60 is 50%; 42 of 60 is 70%; 54 of 60 is 90%.
+  4: { 0: { exact: 0, offByOne: 0 }, 1: { exact: 10, offByOne: 0 }, 2: { exact: 14, offByOne: 0 }, 3: { exact: 18, offByOne: 0 } },
+}
+
+/** Plays a whole Attempt of a Cupping Session with an empty Lineup, Submitting Score Cards that earn `stars`. */
+function playFor(game: ReturnType<typeof newGame>, session: string, stars: StarCount) {
+  game.startAttempt(session, [])
+  const cupCount = game.getAttempt()!.cups.length
+  const { exact, offByOne } = EARNING[cupCount]![stars]
+  rateAll(game, scoreCardsWith(session, exact, offByOne))
+  return game.submit()
+}
+
+/** Earns 9 total Stars in Lab 1, past Lab 2's 8, with perfect Attempts that draw nothing from the random source. */
+function unlockLab2(game: ReturnType<typeof newGame>) {
+  for (const session of ['lab-1-session-1', 'lab-1-session-2', 'lab-1-session-3']) playFor(game, session, 3)
+}
+
+describe('best Stars per Cupping Session', () => {
+  it('records the Stars of a Submitted Attempt on the Lab Map and in total Stars', () => {
+    const game = newGame()
+
+    const reveal = playFor(game, 'lab-1-session-2', 2)
+
+    expect(reveal.stars).toBe(2)
+    expect(game.getLabMap().labs[0]!.sessions.map((s) => s.bestStars)).toEqual([0, 2, 0, 0])
+    expect(game.getLabMap().totalStars).toBe(2)
+  })
+
+  it('keeps only the best result: a worse Attempt never lowers the best Stars, a better one replaces them', () => {
+    const game = newGame()
+    const bestStars = () => game.getLabMap().labs[0]!.sessions[0]!.bestStars
+
+    expect(playFor(game, SESSION, 2).newBest).toBe(true)
+    expect(bestStars()).toBe(2)
+
+    expect(playFor(game, SESSION, 1).newBest).toBe(false)
+    expect(bestStars()).toBe(2)
+    expect(playFor(game, SESSION, 0).newBest).toBe(false)
+    expect(bestStars()).toBe(2)
+    expect(playFor(game, SESSION, 2).newBest).toBe(false)
+    expect(bestStars()).toBe(2)
+
+    expect(playFor(game, SESSION, 3).newBest).toBe(true)
+    expect(bestStars()).toBe(3)
+    expect(game.getLabMap().totalStars).toBe(3)
+  })
+
+  it('sums the best Stars of every Cupping Session into total Stars', () => {
+    const game = newGame()
+
+    playFor(game, 'lab-1-session-1', 3)
+    playFor(game, 'lab-1-session-1', 1)
+    playFor(game, 'lab-1-session-2', 2)
+    playFor(game, 'lab-1-session-4', 1)
+
+    expect(game.getLabMap().totalStars).toBe(3 + 2 + 1)
+  })
+
+  it('an Attempt earning no Stars is no new best, even the first time', () => {
+    expect(playFor(newGame(), SESSION, 0).newBest).toBe(false)
+  })
+})
+
+describe('unlocking Labs with total Stars', () => {
+  const unlocked = (game: ReturnType<typeof newGame>) => game.getLabMap().labs.map((lab) => lab.unlocked)
+
+  it('unlocks Lab 2 at 8 total Stars, not 7', () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-1', 3)
+    playFor(game, 'lab-1-session-2', 3)
+    playFor(game, 'lab-1-session-3', 1)
+
+    expect(game.getLabMap().totalStars).toBe(7)
+    expect(unlocked(game)).toEqual([true, false, false])
+
+    playFor(game, 'lab-1-session-3', 2)
+
+    expect(game.getLabMap().totalStars).toBe(8)
+    expect(unlocked(game)).toEqual([true, true, false])
+  })
+
+  it('unlocks Lab 3 at 18 total Stars, not 17', () => {
+    const game = newGame()
+    for (const session of ['lab-1-session-1', 'lab-1-session-2', 'lab-1-session-3', 'lab-1-session-4']) {
+      playFor(game, session, 3)
+    }
+    playFor(game, 'lab-2-session-1', 3)
+    playFor(game, 'lab-2-session-2', 2)
+
+    expect(game.getLabMap().totalStars).toBe(17)
+    expect(unlocked(game)).toEqual([true, true, false])
+
+    playFor(game, 'lab-2-session-2', 3)
+
+    expect(game.getLabMap().totalStars).toBe(18)
+    expect(unlocked(game)).toEqual([true, true, true])
+  })
+
+  it('rejects starting an Attempt in a locked Lab, naming the Stars it needs', () => {
+    const game = newGame()
+    playFor(game, 'lab-1-session-1', 3)
+
+    expect(() => game.startAttempt('lab-2-session-1', [])).toThrow(GameRuleError)
+    expect(() => game.startAttempt('lab-2-session-1', [])).toThrow('Test Lab 2 is locked: it needs 8 Stars and you have 3')
+    expect(game.getAttempt()).toBeUndefined()
+  })
+
+  it('lets the Player attempt a Cupping Session once its Lab unlocks', () => {
+    const game = newGame()
+    unlockLab2(game)
+
+    game.startAttempt('lab-2-session-1', [])
+
+    expect(game.getAttempt()!.sessionId).toBe('lab-2-session-1')
+  })
+})
+
+describe('saving progress', () => {
+  function gameWith(saveStore: SaveStore) {
+    return createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) })
+  }
+
+  it('round-trips best Stars and unlocked Labs through the save store', () => {
+    const saveStore = createMemorySaveStore()
+    const first = gameWith(saveStore)
+    unlockLab2(first)
+    playFor(first, 'lab-1-session-4', 1)
+    playFor(first, 'lab-2-session-1', 2)
+
+    const reloaded = gameWith(saveStore)
+
+    expect(reloaded.getLabMap()).toEqual(first.getLabMap())
+    expect(reloaded.getLabMap().totalStars).toBe(12)
+    expect(reloaded.getLabMap().labs.map((lab) => lab.unlocked)).toEqual([true, true, false])
+  })
+
+  it('never saves a partial Attempt: cupping and rating leave the save untouched, and a reload has no Attempt', () => {
+    const saveStore = createMemorySaveStore()
+    const game = gameWith(saveStore)
+    playFor(game, SESSION, 2)
+    const savedAfterSubmit = saveStore.load()
+
+    game.startAttempt('lab-1-session-2', ['pip'])
+    game.advanceClock(30)
+    game.performStep('A', 'pour')
+    game.setRating('A', 'aroma', 4)
+
+    expect(saveStore.load()).toBe(savedAfterSubmit)
+    const reloaded = gameWith(saveStore)
+    expect(reloaded.getAttempt()).toBeUndefined()
+    expect(reloaded.getLabMap().totalStars).toBe(2)
+  })
+
+  it('starts fresh from an empty save store', () => {
+    expect(gameWith(createMemorySaveStore()).getLabMap().totalStars).toBe(0)
+  })
+
+  it.each(['not a save', '', 'null', '[3]', '{}'])('starts fresh rather than failing when the save is unreadable: %j', (saved) => {
+    expect(gameWith(createMemorySaveStore(saved)).getLabMap().totalStars).toBe(0)
+  })
+
+  it('drops saved Stars for a Cupping Session the content no longer has, keeping the rest', () => {
+    const saveStore = createMemorySaveStore()
+    const before = gameWith(saveStore)
+    playFor(before, 'lab-1-session-1', 3)
+    playFor(before, 'lab-1-session-2', 2)
+    const content = makeTestContent()
+    content.labs[0]!.sessions = content.labs[0]!.sessions.filter((session) => session.id !== 'lab-1-session-2')
+
+    const after = createGameCore({ content, saveStore, random: createSeededRandom(1) })
+
+    expect(after.getLabMap().totalStars).toBe(3)
+    expect(after.getLabMap().labs[0]!.sessions.map((s) => [s.id, s.bestStars])).toEqual([
+      ['lab-1-session-1', 3],
+      ['lab-1-session-3', 0],
+      ['lab-1-session-4', 0],
+    ])
+  })
+})
+
+describe('Leave Lab', () => {
+  it('mid-Attempt discards the Attempt', () => {
+    const game = newGame()
+    game.startAttempt(SESSION, ['pip'])
+    game.advanceClock(60)
+    game.performStep('A', 'pour')
+    game.setRating('A', 'aroma', 4)
+
+    game.leaveLab()
+
+    expect(game.getAttempt()).toBeUndefined()
+    expect(() => game.submit()).toThrow(/no Attempt/i)
+  })
+
+  it('mid-Attempt keeps the previous best Stars and saves nothing', () => {
+    const saveStore = createMemorySaveStore()
+    const game = createGameCore({ content: makeTestContent(), saveStore, random: createSeededRandom(1) })
+    playFor(game, SESSION, 2)
+    const savedBefore = saveStore.load()
+    game.startAttempt(SESSION, [])
+    rateAll(game, scoreCardsWith(SESSION, 15, 0))
+
+    game.leaveLab()
+
+    expect(game.getLabMap().labs[0]!.sessions[0]!.bestStars).toBe(2)
+    expect(game.getLabMap().totalStars).toBe(2)
+    expect(saveStore.load()).toBe(savedBefore)
+  })
+
+  it('a fresh Attempt after leaving starts from hot, untouched cups', () => {
+    const game = newGame()
+    game.startAttempt(SESSION, [])
+    game.advanceClock(120)
+    game.performStep('A', 'pour')
+    game.leaveLab()
+
+    game.startAttempt(SESSION, [])
+
+    expect(game.getAttempt()!.elapsedSeconds).toBe(0)
+    expect(cup(game, 'A')).toMatchObject({ temperature: 90, completedSteps: [], cues: [], scoreCard: {} })
+  })
+
+  it('is allowed with no Attempt in progress, and changes nothing', () => {
+    const game = newGame()
+    playFor(game, SESSION, 1)
+
+    game.leaveLab()
+
+    expect(game.getAttempt()).toBeUndefined()
+    expect(game.getLabMap().totalStars).toBe(1)
   })
 })

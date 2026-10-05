@@ -21,7 +21,7 @@ The single action that locks in all of the Player's Score Cards for an Attempt a
 _Avoid_: Finish, confirm
 
 **Leave Lab**:
-The Player exiting a Lab back to the menu or map; leaving mid-Attempt discards the Attempt.
+The Player exiting a Lab back to the Lab Map; leaving mid-Attempt discards the Attempt.
 _Avoid_: Quit lab
 
 **Cupping Step**:
@@ -101,6 +101,10 @@ The Cup Temperature range in which a Slurp gives accurate Tasting Cues for a giv
 _Avoid_: Sweet spot, optimal range
 
 ## Progression
+
+**Lab Map**:
+The screen outside any Attempt that lists every Lab and its Cupping Sessions with their best Stars, and shows how many total Stars each locked Lab needs.
+_Avoid_: Level select, world map, menu
 
 **Star**:
 The reward of 1–3 earned for Calibration in a Cupping Session; only the best result per Cupping Session counts, and Star totals unlock new Labs and NPC Cuppers.

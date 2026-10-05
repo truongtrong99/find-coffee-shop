@@ -1,4 +1,4 @@
-import type { GameContent, TastingNotes } from '../core'
+import type { BlindCupContent, CuppingSessionContent, GameContent, TastingNotes } from '../core'
 
 /** House tasting-note text shared by the v1 coffees; a coffee can author its own instead. */
 const houseTastingNotes: TastingNotes = {
@@ -39,7 +39,60 @@ const houseTastingNotes: TastingNotes = {
   },
 }
 
-/** Walking-skeleton content: one Lab with one hard-coded Cupping Session of 3 Blind Cups, and the 2 starter NPC Cuppers. */
+type Coffee = Omit<BlindCupContent, 'letter'>
+
+const yirgacheffe: Coffee = {
+  origin: 'Yirgacheffe, Ethiopia',
+  story:
+    'Grown in tiny garden plots high in the hills of Gedeo and washed at a village station, where neighbours bring their cherries in on foot. Coffee was born in Ethiopia, and this cup still tastes of jasmine and lemon.',
+  referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 2, sweetness: 4 },
+  tastingNotes: houseTastingNotes,
+}
+
+const mandheling: Coffee = {
+  origin: 'Mandheling, Sumatra',
+  story:
+    'Picked by smallholders around Lake Toba and hulled while still wet, a local habit that gives the beans their deep green-blue colour and this heavy, earthy, low-acid cup.',
+  referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 4, sweetness: 3 },
+  tastingNotes: houseTastingNotes,
+}
+
+const tarrazu: Coffee = {
+  origin: 'Tarrazú, Costa Rica',
+  story:
+    'A honey-processed coffee: the sticky fruit is left on the bean while it dries on raised beds under the mountain sun, soaking it with the sweetness you taste in the cup.',
+  referenceScore: { aroma: 4, flavor: 4, acidity: 3, body: 3, sweetness: 5 },
+  tastingNotes: houseTastingNotes,
+}
+
+const huila: Coffee = {
+  origin: 'Huila, Colombia',
+  story:
+    'Grown on steep slopes between two Andean ranges, where cool nights slow the cherries down so they ripen sweet and balanced, with a soft caramel and red apple cup.',
+  referenceScore: { aroma: 3, flavor: 4, acidity: 3, body: 3, sweetness: 4 },
+  tastingNotes: houseTastingNotes,
+}
+
+const nyeri: Coffee = {
+  origin: 'Nyeri, Kenya',
+  story:
+    'Grown on the red volcanic soils below Mount Kenya and soaked twice at the washing station, which leaves the cup sparkling with blackcurrant and grapefruit.',
+  referenceScore: { aroma: 4, flavor: 5, acidity: 5, body: 3, sweetness: 3 },
+  tastingNotes: houseTastingNotes,
+}
+
+const LETTERS = 'ABCDE'
+
+/** One Cupping Session per name, each with every coffee as a Blind Cup, rotated so no two sessions share an order. */
+function placeholderSessions(labId: string, names: readonly string[], coffees: readonly Coffee[]): CuppingSessionContent[] {
+  return names.map((name, i) => ({
+    id: `${labId}-session-${i + 1}`,
+    name,
+    cups: coffees.map((_, cup) => ({ letter: LETTERS[cup]!, ...coffees[(cup + i) % coffees.length]! })),
+  }))
+}
+
+/** v1 content so far: 3 Labs of placeholder Cupping Sessions with 3, 4 and 5 Blind Cups, and the 2 starter NPC Cuppers. */
 export const content: GameContent = {
   tuning: {
     cooling: {
@@ -95,44 +148,27 @@ export const content: GameContent = {
     },
   ],
   labs: [
+    // Placeholder Cupping Sessions until the v1 content lands (#11): each Lab rotates the same coffees.
     {
       id: 'lab-1',
       name: 'The First Lab',
+      starsToUnlock: 0,
       seats: 2,
-      sessions: [
-        {
-          id: 'lab-1-session-1',
-          name: 'First Cupping',
-          cups: [
-            {
-              letter: 'A',
-              origin: 'Yirgacheffe, Ethiopia',
-              story:
-                'Grown in tiny garden plots high in the hills of Gedeo and washed at a village station, where neighbours bring their cherries in on foot. Coffee was born in Ethiopia, and this cup still tastes of jasmine and lemon.',
-              referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 2, sweetness: 4 },
-              tastingNotes: houseTastingNotes,
-            },
-            {
-              letter: 'B',
-              origin: 'Mandheling, Sumatra',
-              story:
-                'Picked by smallholders around Lake Toba and hulled while still wet, a local habit that gives the beans their deep green-blue colour and this heavy, earthy, low-acid cup.',
-              referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 4, sweetness: 3 },
-              tastingNotes: houseTastingNotes,
-            },
-            {
-              letter: 'C',
-              origin: 'Tarrazú, Costa Rica',
-              story:
-                'A honey-processed coffee: the sticky fruit is left on the bean while it dries on raised beds under the mountain sun, soaking it with the sweetness you taste in the cup.',
-              referenceScore: { aroma: 4, flavor: 4, acidity: 3, body: 3, sweetness: 5 },
-              tastingNotes: houseTastingNotes,
-            },
-          ],
-        },
-      ],
+      sessions: placeholderSessions('lab-1', ['First Cupping', 'Morning Table', 'Three Origins', 'Lab 1 Finale'], [yirgacheffe, mandheling, tarrazu]),
+    },
+    {
+      id: 'lab-2',
+      name: 'The Roastery Lab',
+      starsToUnlock: 8,
+      seats: 3,
+      sessions: placeholderSessions('lab-2', ['Four Corners', "Roaster's Choice", 'Washed and Natural', 'Lab 2 Finale'], [yirgacheffe, mandheling, tarrazu, huila]),
+    },
+    {
+      id: 'lab-3',
+      name: 'The Competition Lab',
+      starsToUnlock: 18,
+      seats: 4,
+      sessions: placeholderSessions('lab-3', ['Five Flights', "Judges' Table", 'Blind Finals', 'Grand Finale'], [yirgacheffe, mandheling, tarrazu, huila, nyeri]),
     },
   ],
 }
-
-export const firstSession = content.labs[0]!.sessions[0]!

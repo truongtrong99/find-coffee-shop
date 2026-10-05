@@ -1,4 +1,4 @@
-import type { GameContent, TastingNotes } from '../core'
+import type { BlindCupContent, GameContent, TastingNotes } from '../core'
 
 /** Every note is distinct so tests can tell which Attribute and rating a cue came from. */
 const tastingNotes: TastingNotes = {
@@ -9,6 +9,19 @@ const tastingNotes: TastingNotes = {
   sweetness: { 1: 'sweetness 1: bitter', 2: 'sweetness 2: dry', 3: 'sweetness 3: caramel', 4: 'sweetness 4: honeyed', 5: 'sweetness 5: candied' },
 }
 
+const threeCups: BlindCupContent[] = [
+  { letter: 'A', origin: 'Origin A', story: 'Story of A', referenceScore: { aroma: 4, flavor: 3, acidity: 4, body: 2, sweetness: 3 }, tastingNotes },
+  { letter: 'B', origin: 'Origin B', story: 'Story of B', referenceScore: { aroma: 2, flavor: 5, acidity: 1, body: 5, sweetness: 4 }, tastingNotes },
+  { letter: 'C', origin: 'Origin C', story: 'Story of C', referenceScore: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 }, tastingNotes },
+]
+
+const fourCups: BlindCupContent[] = [
+  { letter: 'A', origin: 'Origin 2A', story: 'Story of 2A', referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 1, sweetness: 2 }, tastingNotes },
+  { letter: 'B', origin: 'Origin 2B', story: 'Story of 2B', referenceScore: { aroma: 1, flavor: 2, acidity: 3, body: 4, sweetness: 5 }, tastingNotes },
+  { letter: 'C', origin: 'Origin 2C', story: 'Story of 2C', referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 3, sweetness: 4 }, tastingNotes },
+  { letter: 'D', origin: 'Origin 2D', story: 'Story of 2D', referenceScore: { aroma: 2, flavor: 5, acidity: 4, body: 5, sweetness: 1 }, tastingNotes },
+]
+
 export interface TestTuningOverrides {
   cooling?: Partial<GameContent['tuning']['cooling']>
   accuracyWindows?: Partial<GameContent['tuning']['tasting']['accuracyWindows']>
@@ -16,7 +29,10 @@ export interface TestTuningOverrides {
   npcScoreNoise?: number
 }
 
-/** Small fixture content for facade tests; independent of the shipped v1 content. */
+/**
+ * Small fixture content for facade tests; independent of the shipped v1 content. Lab 2 and Lab 3 unlock at
+ * the spec's 8 and 18 total Stars: Lab 1's four Cupping Sessions earn at most 12, Lab 2's two another 6.
+ */
 export function makeTestContent({
   cooling = {},
   accuracyWindows = {},
@@ -87,35 +103,31 @@ export function makeTestContent({
       {
         id: 'lab-1',
         name: 'Test Lab',
+        starsToUnlock: 0,
         seats: 2,
         sessions: [
-          {
-            id: 'lab-1-session-1',
-            name: 'Test Session',
-            cups: [
-              { letter: 'A', origin: 'Origin A', story: 'Story of A', referenceScore: { aroma: 4, flavor: 3, acidity: 4, body: 2, sweetness: 3 }, tastingNotes },
-              { letter: 'B', origin: 'Origin B', story: 'Story of B', referenceScore: { aroma: 2, flavor: 5, acidity: 1, body: 5, sweetness: 4 }, tastingNotes },
-              { letter: 'C', origin: 'Origin C', story: 'Story of C', referenceScore: { aroma: 3, flavor: 3, acidity: 3, body: 3, sweetness: 3 }, tastingNotes },
-            ],
-          },
+          { id: 'lab-1-session-1', name: 'Test Session', cups: threeCups },
+          { id: 'lab-1-session-2', name: 'Second Test Session', cups: threeCups },
+          { id: 'lab-1-session-3', name: 'Third Test Session', cups: threeCups },
+          { id: 'lab-1-session-4', name: 'Fourth Test Session', cups: threeCups },
         ],
       },
       {
         id: 'lab-2',
         name: 'Test Lab 2',
+        starsToUnlock: 8,
         seats: 4,
         sessions: [
-          {
-            id: 'lab-2-session-1',
-            name: 'Four-cup Test Session',
-            cups: [
-              { letter: 'A', origin: 'Origin 2A', story: 'Story of 2A', referenceScore: { aroma: 5, flavor: 4, acidity: 5, body: 1, sweetness: 2 }, tastingNotes },
-              { letter: 'B', origin: 'Origin 2B', story: 'Story of 2B', referenceScore: { aroma: 1, flavor: 2, acidity: 3, body: 4, sweetness: 5 }, tastingNotes },
-              { letter: 'C', origin: 'Origin 2C', story: 'Story of 2C', referenceScore: { aroma: 3, flavor: 3, acidity: 2, body: 3, sweetness: 4 }, tastingNotes },
-              { letter: 'D', origin: 'Origin 2D', story: 'Story of 2D', referenceScore: { aroma: 2, flavor: 5, acidity: 4, body: 5, sweetness: 1 }, tastingNotes },
-            ],
-          },
+          { id: 'lab-2-session-1', name: 'Four-cup Test Session', cups: fourCups },
+          { id: 'lab-2-session-2', name: 'Second Four-cup Test Session', cups: fourCups },
         ],
+      },
+      {
+        id: 'lab-3',
+        name: 'Test Lab 3',
+        starsToUnlock: 18,
+        seats: 3,
+        sessions: [{ id: 'lab-3-session-1', name: 'Three-cup Test Session in Lab 3', cups: threeCups }],
       },
     ],
   }

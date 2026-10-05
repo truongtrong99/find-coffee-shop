@@ -1,8 +1,8 @@
 import { Canvas } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
-import { content, firstSession } from '../content/v1'
+import { content } from '../content/v1'
 import { ATTRIBUTE_NAMES, ATTRIBUTES } from '../core'
-import type { AttemptState, BlindCupState, CuppingStep, RevealedCup, StarCount } from '../core'
+import type { AttemptState, BlindCupState, CuppingStep, LabMap, RevealedCup, StarCount } from '../core'
 import { ATTRIBUTE_ICONS, WINDOW_LABELS } from './cueDisplay'
 import { DIORAMA_POSE, LabScene } from './scene/LabScene'
 import { SPEEDS, useGameStore } from './store'
@@ -45,13 +45,18 @@ function formatClock(seconds: number) {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
 }
 
-function Hud() {
+function sessionName(labMap: LabMap, sessionId: string) {
+  return labMap.labs.flatMap((lab) => lab.sessions).find((session) => session.id === sessionId)?.name ?? sessionId
+}
+
+function Hud({ sessionId }: { sessionId: string }) {
   const speed = useGameStore((s) => s.speed)
-  const setSpeed = useGameStore((s) => s.setSpeed)
+  const name = useGameStore((s) => sessionName(s.labMap, sessionId))
   const elapsed = useGameStore((s) => s.attempt?.elapsedSeconds ?? 0)
+  const { setSpeed, leaveLab } = useGameStore.getState()
   return (
     <div className="hud">
-      <h1>{firstSession.name}</h1>
+      <h1>{name}</h1>
       <div>Game clock {formatClock(elapsed)}</div>
       <div className="speed" role="group" aria-label="Game speed">
         {SPEEDS.map((s) => (
@@ -60,16 +65,71 @@ function Hud() {
           </button>
         ))}
       </div>
+      <button onClick={leaveLab}>Leave Lab</button>
+    </div>
+  )
+}
+
+function LabMapScreen() {
+  const { totalStars, labs } = useGameStore((s) => s.labMap)
+  const openSession = useGameStore((s) => s.openSession)
+  return (
+    <div className="backdrop">
+      <section className="lab-map" aria-label="Lab Map">
+        <header>
+          <h2>Lab Map</h2>
+          <p aria-label={`${totalStars} total Stars`}>
+            <span className="star-total">★</span> {totalStars} total Stars
+          </p>
+        </header>
+        {labs.map((lab) => (
+          <section key={lab.id} className={lab.unlocked ? 'lab' : 'lab locked'} aria-label={lab.name}>
+            <h3>
+              {lab.name}
+              {!lab.unlocked && <small>🔒 Needs {lab.starsToUnlock} Stars</small>}
+            </h3>
+            <div className="lab-sessions">
+              {lab.sessions.map((session) => (
+                <button key={session.id} disabled={!lab.unlocked} onClick={() => openSession(session.id)}>
+                  {session.name}
+                  <Stars count={session.bestStars} />
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
+      </section>
+    </div>
+  )
+}
+
+/** Asks before discarding the Attempt in progress; the cups keep cooling while the Player decides. */
+function LeaveConfirmation() {
+  const { confirmLeaveLab, cancelLeaveLab } = useGameStore.getState()
+  return (
+    <div className="backdrop">
+      <section className="leave-confirmation" role="alertdialog" aria-label="Leave Lab" aria-describedby="leave-warning">
+        <p id="leave-warning">Leave? Your cups will go cold!</p>
+        <p className="empty">This Attempt will be discarded. Your Stars stay as they are.</p>
+        <div className="choices">
+          <button className="secondary" onClick={cancelLeaveLab}>
+            Keep cupping
+          </button>
+          <button className="primary" onClick={confirmLeaveLab}>
+            Leave Lab
+          </button>
+        </div>
+      </section>
     </div>
   )
 }
 
 function LineupScreen() {
-  const { seats, npcCuppers } = useGameStore((s) => s.lineupOptions)
+  const { seats, npcCuppers } = useGameStore((s) => s.lineupOptions)!
   const lineup = useGameStore((s) => s.lineup)
   const lineupRejection = useGameStore((s) => s.lineupRejection)
   const rejection = useGameStore((s) => s.rejection)
-  const { toggleLineup, startAttempt } = useGameStore.getState()
+  const { toggleLineup, startAttempt, leaveLab } = useGameStore.getState()
   const problem = lineupRejection ?? rejection
   return (
     <div className="backdrop">
@@ -96,6 +156,9 @@ function LineupScreen() {
         )}
         <button className="primary" disabled={lineupRejection !== null} onClick={startAttempt}>
           Start cupping
+        </button>
+        <button className="secondary" onClick={leaveLab}>
+          Leave Lab
         </button>
       </section>
     </div>
@@ -242,13 +305,13 @@ function AttemptPanel({ attempt: { cups, canSubmit } }: { attempt: AttemptState 
 
 function Stars({ count }: { count: StarCount }) {
   return (
-    <div className="stars" aria-label={`${count} of 3 Stars`}>
+    <span className="stars" role="img" aria-label={`${count} of 3 Stars`}>
       {[1, 2, 3].map((n) => (
         <span key={n} className={n <= count ? 'earned' : undefined}>
           ★
         </span>
       ))}
-    </div>
+    </span>
   )
 }
 
@@ -295,7 +358,7 @@ function RevealCard({ cup }: { cup: RevealedCup }) {
 
 function Reveal() {
   const reveal = useGameStore((s) => s.reveal)
-  const cupAgain = useGameStore((s) => s.cupAgain)
+  const { cupAgain, leaveLab } = useGameStore.getState()
   if (!reveal) return null
   return (
     <div className="backdrop">
@@ -303,6 +366,7 @@ function Reveal() {
         <header>
           <h2>The Reveal</h2>
           <Stars count={reveal.stars} />
+          {reveal.newBest && <p className="new-best">New best!</p>}
           <p>
             {reveal.calibrationPoints} of {reveal.maxCalibrationPoints} Calibration Points
           </p>
@@ -312,9 +376,14 @@ function Reveal() {
             <RevealCard key={cup.letter} cup={cup} />
           ))}
         </div>
-        <button className="primary" onClick={cupAgain}>
-          Cup again
-        </button>
+        <div className="choices">
+          <button className="secondary" onClick={leaveLab}>
+            Leave Lab
+          </button>
+          <button className="primary" onClick={cupAgain}>
+            Cup again
+          </button>
+        </div>
       </section>
     </div>
   )
@@ -323,7 +392,9 @@ function Reveal() {
 export function App() {
   useGameLoop()
   const labelLayer = useRef<HTMLDivElement>(null)
+  const sessionId = useGameStore((s) => s.sessionId)
   const choosingLineup = useGameStore((s) => s.attempt === null)
+  const confirmingLeave = useGameStore((s) => s.confirmingLeave)
   return (
     <>
       <Canvas
@@ -334,9 +405,16 @@ export function App() {
         <LabScene labelLayer={labelLayer} />
       </Canvas>
       <div ref={labelLayer} className="label-layer" />
-      <Hud />
-      {choosingLineup ? <LineupScreen /> : <CuppingPanel />}
-      <Reveal />
+      {sessionId === null ? (
+        <LabMapScreen />
+      ) : (
+        <>
+          <Hud sessionId={sessionId} />
+          {choosingLineup ? <LineupScreen /> : <CuppingPanel />}
+          <Reveal />
+          {confirmingLeave && <LeaveConfirmation />}
+        </>
+      )}
     </>
   )
 }

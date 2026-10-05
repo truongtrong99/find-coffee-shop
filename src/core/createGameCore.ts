@@ -4,6 +4,8 @@ import { assertStepAllowed, cuesForStep } from './cupping'
 import { GameRuleError } from './errors'
 import { isUnlocked, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
+import { isLabUnlocked, labMap, loadProgress, recordStars, serializeProgress, totalStars } from './progression'
+import type { BestStars } from './progression'
 import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
 import type {
   AttemptState,
@@ -14,6 +16,7 @@ import type {
   CuppingStep,
   GameContent,
   LabContent,
+  LabMap,
   LineupOptions,
   NpcCupperContent,
   PerformedStep,
@@ -29,12 +32,14 @@ export interface GameCoreDeps {
 }
 
 export interface GameCore {
+  /** The Lab Map: every Lab, whether it is unlocked and the Stars it needs, each Cupping Session's best Stars, and total Stars. */
+  getLabMap(): LabMap
   /** The Lab's Seat count and the NPC Cuppers available for a Lineup in this Cupping Session. */
   getLineupOptions(sessionId: string): LineupOptions
   /**
    * Starts an Attempt of a Cupping Session with every Blind Cup on the table and the Lineup's
-   * NPC Cuppers (by id) in the Seats. Rejected if the Lineup has a locked or repeated NPC Cupper
-   * or more NPC Cuppers than Seats; Seats may be left empty.
+   * NPC Cuppers (by id) in the Seats. Rejected if the Cupping Session's Lab is locked, or if the Lineup
+   * has a locked or repeated NPC Cupper or more NPC Cuppers than Seats; Seats may be left empty.
    */
   startAttempt(sessionId: string, lineup: readonly string[]): void
   /** Why `startAttempt` would reject this Lineup for this Cupping Session, or undefined if it fits. */
@@ -52,10 +57,15 @@ export interface GameCore {
   /** Rates one Attribute on the Player's Score Card for the Blind Cup with this letter, replacing any earlier rating. */
   setRating(cupLetter: string, attribute: Attribute, rating: number): void
   /**
-   * Locks in every Score Card, ends the Attempt and returns the Reveal.
-   * Rejected until every Attribute on every Blind Cup is rated.
+   * Locks in every Score Card, ends the Attempt, keeps its Stars if they are the Cupping Session's best,
+   * saves progress and returns the Reveal. Rejected until every Attribute on every Blind Cup is rated.
    */
   submit(): RevealResult
+  /**
+   * The Player leaves the Lab for the Lab Map. Mid-Attempt this discards the Attempt: no Stars are earned
+   * or lost, and nothing is saved. With no Attempt in progress there is nothing to discard.
+   */
+  leaveLab(): void
   /** The current Attempt, or undefined when none is in progress. A fresh snapshot each call. */
   getAttempt(): AttemptState | undefined
 }
@@ -64,12 +74,13 @@ export interface GameCore {
 type CupProgress = Omit<BlindCupState, 'scoreCardComplete' | 'windows' | 'stoneCold'>
 type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit'> & { cups: CupProgress[] }
 
-export function createGameCore({ content, random }: GameCoreDeps): GameCore {
+export function createGameCore({ content, saveStore, random }: GameCoreDeps): GameCore {
   const cooling = createCoolingCurve(content.tuning.cooling)
   assertValidTastingTuning(content.tuning.tasting)
   const { temperatureAt } = cooling
   const { accuracyWindows } = content.tuning.tasting
   const { stoneColdTemperature } = content.tuning.cooling
+  let bestStars: BestStars = loadProgress(saveStore.load(), content.labs)
   let attempt: AttemptProgress | undefined
   let cupContents: BlindCupContent[] = []
   /** The Lineup in Seat order, each with every Cupping Step they will perform this Attempt. */
@@ -98,6 +109,9 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
   }
 
   return {
+    getLabMap() {
+      return labMap(content.labs, bestStars)
+    },
     getLineupOptions(sessionId) {
       const { lab } = findCuppingSession(sessionId)
       return {
@@ -107,6 +121,9 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
     },
     startAttempt(sessionId, lineup) {
       const { lab, session } = findCuppingSession(sessionId)
+      if (!isLabUnlocked(lab, bestStars)) {
+        throw new GameRuleError(`${lab.name} is locked: it needs ${lab.starsToUnlock} Stars and you have ${totalStars(bestStars)}`)
+      }
       const letters = session.cups.map((cup) => cup.letter)
       seated = seatLineup(content.npcCuppers, lab.seats, lineup).map((npc) => ({
         npc,
@@ -180,7 +197,7 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
         const missing = gaps.map(({ letter, unrated }) => `Cup ${letter}: ${unrated.map((a) => ATTRIBUTE_NAMES[a]).join(', ')}`)
         throw new GameRuleError(`Rate every Attribute before Submit; still unrated: ${missing.join('; ')}`)
       }
-      const reveal = revealAttempt(
+      const scored = revealAttempt(
         attempt.sessionId,
         cupContents.map((cup, i) => ({
           content: cup,
@@ -192,7 +209,13 @@ export function createGameCore({ content, random }: GameCoreDeps): GameCore {
         })),
       )
       attempt = undefined
-      return reveal
+      const previousBest = bestStars[scored.sessionId] ?? 0
+      bestStars = recordStars(bestStars, scored.sessionId, scored.stars)
+      saveStore.save(serializeProgress(bestStars))
+      return { ...scored, newBest: scored.stars > previousBest }
+    },
+    leaveLab() {
+      attempt = undefined
     },
     getAttempt() {
       return (

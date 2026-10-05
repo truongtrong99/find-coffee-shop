@@ -81,6 +81,8 @@ export interface CuppingSessionContent {
 export interface LabContent {
   id: string
   name: string
+  /** Total Stars the Player needs before the Lab unlocks; 0 for a Lab open from the start. */
+  starsToUnlock: number
   /** Seats at the cupping table for NPC Cuppers, 2–4. */
   seats: number
   sessions: CuppingSessionContent[]
@@ -213,4 +215,32 @@ export interface RevealResult {
   maxCalibrationPoints: number
   /** Stars earned for this Attempt: 1 at 50% of the maximum Calibration Points, 2 at 70%, 3 at 90%. */
   stars: StarCount
+  /** Whether this Attempt earned more Stars than any before it in this Cupping Session, so they are the new best. */
+  newBest: boolean
+}
+
+/** A Cupping Session on the Lab Map. */
+export interface CuppingSessionSummary {
+  id: string
+  name: string
+  /** The best Stars any Attempt of this Cupping Session has earned; 0 until one earns a Star. */
+  bestStars: StarCount
+}
+
+/** A Lab on the Lab Map. */
+export interface LabSummary {
+  id: string
+  name: string
+  /** Total Stars the Player needs before the Lab unlocks. */
+  starsToUnlock: number
+  /** Whether the Player's total Stars have reached `starsToUnlock`, so its Cupping Sessions can be attempted. */
+  unlocked: boolean
+  sessions: CuppingSessionSummary[]
+}
+
+/** The Player's progression: every Lab and Cupping Session, in content order, with the Stars earned. */
+export interface LabMap {
+  /** The sum of the best Stars per Cupping Session. */
+  totalStars: number
+  labs: LabSummary[]
 }

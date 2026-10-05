@@ -11,7 +11,7 @@ npm test           # Game Core facade tests
 npm run typecheck
 npm run build      # static site in dist/
 npm run screenshot # screenshot the running game in headless Chromium
-npm run play       # play one scripted Attempt, screenshotting each stage
+npm run play       # play scripted Attempts from the Lab Map, Leave Lab and reload, screenshotting each stage
 ```
 
 Both browser scripts write to `screenshots/` (git-ignored) and exit non-zero on any browser console error or uncaught exception.

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { content, firstSession } from '../content/v1'
+import { content } from '../content/v1'
 import { createGameCore, GameRuleError } from '../core'
-import type { AttemptState, Attribute, CuppingStep, LineupOptions, RevealResult, TastingCue } from '../core'
+import type { AttemptState, Attribute, CuppingStep, LabMap, LineupOptions, RevealResult, TastingCue } from '../core'
 import { createLocalStorageSaveStore } from './localStorageSaveStore'
 
 export const SPEEDS = [1, 2, 4, 8] as const
@@ -32,8 +32,12 @@ export interface FreshCues {
 }
 
 interface GameStore {
-  /** What the Lineup screen offers before an Attempt. */
-  lineupOptions: LineupOptions
+  /** Every Lab and Cupping Session with the Stars earned, as of the last Submit. */
+  labMap: LabMap
+  /** The Cupping Session picked on the Lab Map, or null while on the Lab Map. */
+  sessionId: string | null
+  /** What the Lineup screen offers before an Attempt of the picked Cupping Session, or null while on the Lab Map. */
+  lineupOptions: LineupOptions | null
   /** The NPC Cuppers picked for the next Attempt, in Seat order. */
   lineup: string[]
   /** Why the core would reject the picked Lineup, or null if it fits the Seats. */
@@ -51,6 +55,10 @@ interface GameStore {
   rejection: string | null
   /** The Tasting Cues the Player's latest Cupping Step gave, while their effects show. */
   freshCues: FreshCues | null
+  /** Whether the Player asked to Leave Lab mid-Attempt and is being asked to confirm. */
+  confirmingLeave: boolean
+  /** Goes from the Lab Map to the Lineup screen for a Cupping Session. */
+  openSession(sessionId: string): void
   /** Seats an NPC Cupper in the next free Seat, or stands them up if already seated. */
   toggleLineup(npcId: string): void
   /** Starts an Attempt with the chosen Lineup. */
@@ -63,6 +71,12 @@ interface GameStore {
   submit(): void
   /** Returns to the Lineup screen for a fresh Attempt of the same Cupping Session after the Reveal. */
   cupAgain(): void
+  /** Leaves the Lab for the Lab Map; mid-Attempt, asks the Player to confirm first. */
+  leaveLab(): void
+  /** Leaves the Lab after the Player confirmed, discarding the Attempt in progress. */
+  confirmLeaveLab(): void
+  /** The Player changed their mind and keeps cupping. */
+  cancelLeaveLab(): void
   returnToDiorama(): void
   /** Passes elapsed real time to the core as a game-time step; the core decides what it means. */
   tick(realSeconds: number): void
@@ -83,26 +97,45 @@ function tryCommand(command: () => void): string | null {
   }
 }
 
+function clearTimers() {
+  clearTimeout(returnTimer)
+  clearTimeout(freshCuesTimer)
+}
+
+/** The picked Cupping Session; only called once the Player has left the Lab Map. */
+function pickedSession(get: () => GameStore): string {
+  const { sessionId } = get()
+  if (sessionId === null) throw new Error('No Cupping Session picked on the Lab Map')
+  return sessionId
+}
+
 export const useGameStore = create<GameStore>((set, get) => ({
-  lineupOptions: core.getLineupOptions(firstSession.id),
+  labMap: core.getLabMap(),
+  sessionId: null,
+  lineupOptions: null,
   lineup: [],
   lineupRejection: null,
   attempt: null,
   reveal: null,
   speed: 1,
-  selectedLetter: firstSession.cups[0]!.letter,
+  selectedLetter: '',
   firstPersonLetter: null,
   rejection: null,
   freshCues: null,
+  confirmingLeave: false,
+  openSession(sessionId) {
+    set({ sessionId, lineupOptions: core.getLineupOptions(sessionId), lineup: [], lineupRejection: null, rejection: null })
+  },
   toggleLineup(npcId) {
     const { lineup } = get()
     const picked = lineup.includes(npcId) ? lineup.filter((id) => id !== npcId) : [...lineup, npcId]
-    set({ lineup: picked, lineupRejection: core.checkLineup(firstSession.id, picked) ?? null, rejection: null })
+    set({ lineup: picked, lineupRejection: core.checkLineup(pickedSession(get), picked) ?? null, rejection: null })
   },
   startAttempt() {
-    const rejection = tryCommand(() => core.startAttempt(firstSession.id, get().lineup))
+    const rejection = tryCommand(() => core.startAttempt(pickedSession(get), get().lineup))
     if (rejection) return set({ rejection })
-    set({ attempt: core.getAttempt()!, selectedLetter: firstSession.cups[0]!.letter, rejection: null })
+    const attempt = core.getAttempt()!
+    set({ attempt, selectedLetter: attempt.cups[0]!.letter, rejection: null })
   },
   setSpeed: (speed) => set({ speed }),
   selectCup(letter) {
@@ -137,13 +170,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
       reveal = core.submit()
     })
     if (rejection) return set({ rejection })
-    clearTimeout(returnTimer)
-    clearTimeout(freshCuesTimer)
-    set({ reveal, firstPersonLetter: null, rejection: null, freshCues: null })
+    clearTimers()
+    set({ reveal, labMap: core.getLabMap(), firstPersonLetter: null, rejection: null, freshCues: null })
   },
   cupAgain() {
-    set({ lineupOptions: core.getLineupOptions(firstSession.id), attempt: null, reveal: null, rejection: null })
+    set({ lineupOptions: core.getLineupOptions(pickedSession(get)), attempt: null, reveal: null, rejection: null })
   },
+  leaveLab() {
+    if (core.getAttempt()) return set({ confirmingLeave: true })
+    get().confirmLeaveLab()
+  },
+  confirmLeaveLab() {
+    core.leaveLab()
+    clearTimers()
+    set({
+      labMap: core.getLabMap(),
+      sessionId: null,
+      lineupOptions: null,
+      attempt: null,
+      reveal: null,
+      firstPersonLetter: null,
+      rejection: null,
+      freshCues: null,
+      confirmingLeave: false,
+    })
+  },
+  cancelLeaveLab: () => set({ confirmingLeave: false }),
   returnToDiorama() {
     clearTimeout(returnTimer)
     set({ firstPersonLetter: null })
