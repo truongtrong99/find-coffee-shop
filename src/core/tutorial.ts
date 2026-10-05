@@ -5,12 +5,18 @@ import { unratedAttributes } from './scoring'
 import { ATTRIBUTES } from './types'
 import type { BlindCupState, CuppingSessionContent, LabContent, NpcCupperContent, TutorialPrompt } from './types'
 
-/** Throws a GameRuleError unless every tutorial can be played on first launch: its Lab open and its Lineup seatable. */
+/**
+ * Throws a GameRuleError unless the only tutorial is Lab 1's first Cupping Session and can be played on first launch:
+ * its Lab open and its Lineup seatable.
+ */
 export function assertValidTutorials(labs: readonly LabContent[], npcCuppers: readonly NpcCupperContent[]): void {
-  for (const lab of labs) {
-    for (const session of lab.sessions) {
+  for (const [labIndex, lab] of labs.entries()) {
+    for (const [sessionIndex, session] of lab.sessions.entries()) {
       if (!session.tutorial) continue
       const problem = `Invalid tutorial "${session.name}"`
+      if (labIndex > 0 || sessionIndex > 0) {
+        throw new GameRuleError(`${problem}: only Lab 1's first Cupping Session can be the tutorial`)
+      }
       if (lab.starsToUnlock > 0) {
         throw new GameRuleError(`${problem}: ${lab.name} needs ${lab.starsToUnlock} Stars, so it is locked on first launch`)
       }
@@ -37,14 +43,17 @@ export function assertTutorialLineup(
   throw new GameRuleError(`The tutorial's Lineup is pre-filled: ${names.join(', ')}`)
 }
 
-/** The Attributes a cup is still to be tasted accurately for, split by whether their Accuracy Window is open now. */
-function untasted(cup: BlindCupState) {
-  const pending = ATTRIBUTES.filter(
+/**
+ * The Accuracy Windows a cup is still to be tasted inside: those of Attributes with no accurate cue in its Cue Log,
+ * split into open now and still too hot. A window the cup has cooled past is let go.
+ */
+function windowsToTaste(cup: BlindCupState) {
+  const untasted = ATTRIBUTES.filter(
     (attribute) => !cup.cues.some((cue) => cue.attribute === attribute && cue.window === 'inside'),
   )
   return {
-    slurpNow: pending.filter((attribute) => cup.windows[attribute] === 'inside'),
-    waitFor: pending.filter((attribute) => cup.windows[attribute] === 'too-hot'),
+    slurpNow: untasted.filter((attribute) => cup.windows[attribute] === 'inside'),
+    waitFor: untasted.filter((attribute) => cup.windows[attribute] === 'too-hot'),
   }
 }
 
@@ -59,7 +68,7 @@ export function tutorialPrompt(cups: readonly BlindCupState[]): TutorialPrompt {
   const unslurped = cups.find((cup) => !cup.completedSteps.includes('slurp'))
   if (unslurped) return { kind: 'cupping-step', cupLetter: unslurped.letter, step: nextValidSteps(unslurped.completedSteps)[0]! }
 
-  const toTaste = cups.map((cup) => ({ cupLetter: cup.letter, ...untasted(cup) }))
+  const toTaste = cups.map((cup) => ({ cupLetter: cup.letter, ...windowsToTaste(cup) }))
   const next = toTaste.find(({ slurpNow }) => slurpNow.length > 0) ?? toTaste.find(({ waitFor }) => waitFor.length > 0)
   if (next) return { kind: 'accuracy-windows', ...next }
 

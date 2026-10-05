@@ -92,7 +92,7 @@ function placeholderSessions(labId: string, names: readonly string[], coffees: r
   }))
 }
 
-/** The sessions with the first made the guided tutorial, its Seats pre-filled with this Lineup. */
+/** Makes the first of these Cupping Sessions the guided tutorial, its Seats pre-filled with this Lineup. */
 function asTutorial([first, ...rest]: CuppingSessionContent[], lineup: string[]): CuppingSessionContent[] {
   return [{ ...first!, tutorial: { lineup } }, ...rest]
 }

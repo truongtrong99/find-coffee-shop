@@ -947,7 +947,6 @@ describe('the Lab Map', () => {
             { id: 'lab-1-session-1', name: 'Test Session', bestStars: 0, tutorial: false },
             { id: 'lab-1-session-2', name: 'Second Test Session', bestStars: 0, tutorial: false },
             { id: 'lab-1-session-3', name: 'Third Test Session', bestStars: 0, tutorial: false },
-            { id: 'lab-1-session-4', name: 'Fourth Test Session', bestStars: 0, tutorial: false },
           ],
         },
         {
@@ -983,9 +982,12 @@ const EARNING: Record<number, Record<StarCount, { exact: number; offByOne: numbe
   4: { 0: { exact: 0, offByOne: 0 }, 1: { exact: 10, offByOne: 0 }, 2: { exact: 14, offByOne: 0 }, 3: { exact: 18, offByOne: 0 } },
 }
 
-/** Plays a whole Attempt of a Cupping Session with an empty Lineup, Submitting Score Cards that earn `stars`. */
+/**
+ * Plays a whole Attempt of a Cupping Session with an empty Lineup, or the tutorial's pre-filled one, Submitting
+ * Score Cards that earn `stars`.
+ */
 function playFor(game: ReturnType<typeof newGame>, session: string, stars: StarCount) {
-  game.startAttempt(session, [])
+  game.startAttempt(session, game.getLineupOptions(session).prefilledLineup?.map((npc) => npc.id) ?? [])
   const cupCount = game.getAttempt()!.cups.length
   const { exact, offByOne } = EARNING[cupCount]![stars]
   rateAll(game, scoreCardsWith(session, exact, offByOne))
@@ -1009,7 +1011,7 @@ describe('best Stars per Cupping Session', () => {
     const reveal = playFor(game, 'lab-1-session-2', 2)
 
     expect(reveal.stars).toBe(2)
-    expect(game.getLabMap().labs[0]!.sessions.map((s) => s.bestStars)).toEqual([0, 0, 2, 0, 0])
+    expect(game.getLabMap().labs[0]!.sessions.map((s) => s.bestStars)).toEqual([0, 0, 2, 0])
     expect(game.getLabMap().totalStars).toBe(2)
   })
 
@@ -1038,7 +1040,7 @@ describe('best Stars per Cupping Session', () => {
     playFor(game, 'lab-1-session-1', 3)
     playFor(game, 'lab-1-session-1', 1)
     playFor(game, 'lab-1-session-2', 2)
-    playFor(game, 'lab-1-session-4', 1)
+    playFor(game, 'lab-1-tutorial', 1)
 
     expect(game.getLabMap().totalStars).toBe(3 + 2 + 1)
   })
@@ -1068,7 +1070,7 @@ describe('unlocking Labs with total Stars', () => {
 
   it('unlocks Lab 3 at 18 total Stars, not 17', () => {
     const game = newGame()
-    for (const session of ['lab-1-session-1', 'lab-1-session-2', 'lab-1-session-3', 'lab-1-session-4']) {
+    for (const session of ['lab-1-tutorial', 'lab-1-session-1', 'lab-1-session-2', 'lab-1-session-3']) {
       playFor(game, session, 3)
     }
     playFor(game, 'lab-2-session-1', 3)
@@ -1121,7 +1123,7 @@ describe('saving progress', () => {
     const saveStore = createMemorySaveStore()
     const first = gameWith(saveStore)
     unlockLab2(first)
-    playFor(first, 'lab-1-session-4', 1)
+    playFor(first, 'lab-1-tutorial', 1)
     playFor(first, 'lab-2-session-1', 2)
 
     const reloaded = gameWith(saveStore)
@@ -1171,7 +1173,6 @@ describe('saving progress', () => {
       ['lab-1-tutorial', 0],
       ['lab-1-session-1', 3],
       ['lab-1-session-3', 0],
-      ['lab-1-session-4', 0],
     ])
   })
 })
@@ -1423,8 +1424,10 @@ describe('tutorial content', () => {
   it.each([
     { problem: 'a locked NPC Cupper', change: (c: GameContent) => (c.labs[0]!.sessions[0]!.tutorial = { lineup: ['biscuit'] }), reason: /tutorial.*Biscuit.*locked/ },
     { problem: 'more NPC Cuppers than Seats', change: (c: GameContent) => (c.labs[0]!.sessions[0]!.tutorial = { lineup: ['pip', 'mochi', 'juniper'] }), reason: /tutorial.*2 Seats/ },
-    { problem: 'a Lab locked on first launch', change: (c: GameContent) => (c.labs[1]!.sessions[0]!.tutorial = { lineup: [] }), reason: /tutorial.*Test Lab 2.*8 Stars/ },
-  ])('rejects a tutorial that cannot be played on first launch: $problem', ({ change, reason }) => {
+    { problem: 'its Lab locked on first launch', change: (c: GameContent) => (c.labs[0]!.starsToUnlock = 3), reason: /tutorial.*Test Lab.*3 Stars/ },
+    { problem: 'not the first Cupping Session of Lab 1', change: (c: GameContent) => (c.labs[0]!.sessions[1]!.tutorial = { lineup: [] }), reason: /"Test Session".*only Lab 1's first Cupping Session/ },
+    { problem: 'in another Lab', change: (c: GameContent) => (c.labs[1]!.sessions[0]!.tutorial = { lineup: [] }), reason: /Four-cup Test Session.*only Lab 1's first Cupping Session/ },
+  ])("rejects a tutorial that is not Lab 1's first Cupping Session, playable on first launch: $problem", ({ change, reason }) => {
     expect(contentWithTutorial(change)).toThrow(GameRuleError)
     expect(contentWithTutorial(change)).toThrow(reason)
   })

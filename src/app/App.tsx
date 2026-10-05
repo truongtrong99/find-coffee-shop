@@ -185,7 +185,7 @@ const STEP_GUIDANCE: Record<CuppingStep, (cup: string) => string> = {
 function promptText(prompt: TutorialPrompt, firstLetter: string): { title: string; body: string } {
   switch (prompt.kind) {
     case 'cupping-step': {
-      const lead = prompt.cupLetter === firstLetter ? '' : `Every cup cools together, so cup Cup ${prompt.cupLetter} too. `
+      const lead = prompt.cupLetter === firstLetter ? '' : `Every cup cools together, so give Cup ${prompt.cupLetter} the same steps. `
       return { title: STEP_LABELS[prompt.step], body: lead + STEP_GUIDANCE[prompt.step](prompt.cupLetter) }
     }
     case 'accuracy-windows': {
@@ -213,6 +213,36 @@ function promptText(prompt: TutorialPrompt, firstLetter: string): { title: strin
   }
 }
 
+/** What the tutorial's prompt points at on the cup the Player is looking at; nothing on any other cup. */
+interface PromptHighlights {
+  /** The cup to move to, when the prompt points at another cup. */
+  cupLetter: string | undefined
+  step: CuppingStep | undefined
+  windows: readonly Attribute[]
+  ratings: readonly Attribute[]
+  submit: boolean
+}
+
+function promptHighlights(prompt: TutorialPrompt | undefined, selectedLetter: string): PromptHighlights {
+  const none: PromptHighlights = { cupLetter: undefined, step: undefined, windows: [], ratings: [], submit: false }
+  if (!prompt) return none
+  if (prompt.kind === 'submit') return { ...none, submit: true }
+  if (prompt.cupLetter !== selectedLetter) return { ...none, cupLetter: prompt.cupLetter }
+  switch (prompt.kind) {
+    case 'cupping-step':
+      return { ...none, step: prompt.step }
+    case 'accuracy-windows':
+      return { ...none, step: prompt.slurpNow.length > 0 ? 'slurp' : undefined, windows: prompt.slurpNow }
+    case 'score-card':
+      return { ...none, ratings: prompt.unrated }
+  }
+}
+
+/** Joins the class names that apply. */
+function classNames(...names: (string | false)[]) {
+  return names.filter(Boolean).join(' ') || undefined
+}
+
 function TutorialPromptCard({ prompt, attempt }: { prompt: TutorialPrompt; attempt: AttemptState }) {
   const { title, body } = promptText(prompt, attempt.cups[0]!.letter)
   const company = attempt.npcCuppers.map((npc) => npc.name)
@@ -233,7 +263,7 @@ function Thermometer({ cup, prompted = [] }: { cup: BlindCupState; prompted?: re
         const { min, max } = accuracyWindows[attribute]
         const position = cup.windows[attribute]
         return (
-          <div key={attribute} className={`window-row ${position}${prompted.includes(attribute) ? ' prompted' : ''}`}>
+          <div key={attribute} className={classNames('window-row', position, prompted.includes(attribute) && 'prompted')}>
             <span className="window-name">
               {ATTRIBUTE_ICONS[attribute]} {ATTRIBUTE_NAMES[attribute]}
             </span>
@@ -273,13 +303,7 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
   const rejection = useGameStore((s) => s.rejection)
   const { selectCup, performStep, returnToDiorama, setRating, submit } = useGameStore.getState()
   const cup = cups.find((c) => c.letter === selectedLetter)!
-  // The tutorial's prompt points at one cup; it highlights that cup's controls once the Player looks at it.
-  const promptedCup = tutorialPrompt && 'cupLetter' in tutorialPrompt ? tutorialPrompt.cupLetter : undefined
-  const onPromptedCup = promptedCup === cup.letter
-  const promptedWindows = onPromptedCup && tutorialPrompt?.kind === 'accuracy-windows' ? tutorialPrompt.slurpNow : []
-  const promptedStep =
-    onPromptedCup && tutorialPrompt?.kind === 'cupping-step' ? tutorialPrompt.step : promptedWindows.length > 0 ? 'slurp' : undefined
-  const promptedRatings = onPromptedCup && tutorialPrompt?.kind === 'score-card' ? tutorialPrompt.unrated : []
+  const highlights = promptHighlights(tutorialPrompt, cup.letter)
   const logEnd = useRef<HTMLLIElement>(null)
 
   useEffect(() => {
@@ -294,7 +318,7 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
           <button
             key={c.letter}
             aria-pressed={c.letter === selectedLetter}
-            className={c.letter === promptedCup && !onPromptedCup ? 'prompted' : undefined}
+            className={classNames(c.letter === highlights.cupLetter && 'prompted')}
             onClick={() => selectCup(c.letter)}
           >
             Cup {c.letter}
@@ -309,9 +333,8 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
       <div className="steps" role="group" aria-label="Cupping Steps">
         {STEPS.map(({ step, label }) => {
           const done = step !== 'slurp' && cup.completedSteps.includes(step)
-          const className = [done && 'done', step === promptedStep && 'prompted'].filter(Boolean).join(' ')
           return (
-            <button key={step} className={className || undefined} onClick={() => performStep(step)}>
+            <button key={step} className={classNames(done && 'done', step === highlights.step && 'prompted')} onClick={() => performStep(step)}>
               {done ? `✓ ${label}` : label}
             </button>
           )
@@ -329,7 +352,7 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
       )}
 
       <h3>Thermometer</h3>
-      <Thermometer cup={cup} prompted={promptedWindows} />
+      <Thermometer cup={cup} prompted={highlights.windows} />
 
       <h3>Cue Log</h3>
       {cup.cues.length === 0 ? (
@@ -355,7 +378,7 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
           return (
             <div
               key={attribute}
-              className={promptedRatings.includes(attribute) ? 'rating-row prompted' : 'rating-row'}
+              className={classNames('rating-row', highlights.ratings.includes(attribute) && 'prompted')}
               role="group"
               aria-label={ATTRIBUTE_NAMES[attribute]}
             >
@@ -375,7 +398,7 @@ function AttemptPanel({ attempt }: { attempt: AttemptState }) {
           )
         })}
       </div>
-      <button className={tutorialPrompt?.kind === 'submit' ? 'submit prompted' : 'submit'} disabled={!canSubmit} onClick={submit}>
+      <button className={classNames('submit', highlights.submit && 'prompted')} disabled={!canSubmit} onClick={submit}>
         Submit
       </button>
       {!canSubmit && <p className="empty">Rate every Attribute on every cup to Submit.</p>}

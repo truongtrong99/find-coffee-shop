@@ -13,7 +13,8 @@ export const STEP_NAMES: Record<CuppingStep, string> = {
 
 /**
  * Strict order: Dry Fragrance → Pour → Break the Crust → Skim, then Slurp as often as the Player likes.
- * Dry Fragrance is optional but only allowed before Pour.
+ * Dry Fragrance is optional but only allowed before Pour. The steps are listed in Cupping Step order, so the first
+ * is the fullest way to cup.
  */
 export function nextValidSteps(completedSteps: readonly CuppingStep[]): CuppingStep[] {
   switch (completedSteps.at(-1)) {

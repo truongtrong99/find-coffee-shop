@@ -1,5 +1,6 @@
 // Play the tutorial in headless Chromium from the Lab Map, following its prompts and screenshotting each stage under
-// screenshots/, then Leave Lab mid-Attempt, check the Stars survive a reload, and choose a Lineup for the next session.
+// screenshots/, then Leave Lab mid-Attempt, check the Stars survive a reload, and choose a Lineup for the next
+// Cupping Session.
 // Usage: npm run play
 // Exits 1 if a check fails or the page logged any console error or uncaught exception.
 // Controls are found by accessible role and name, so restyling doesn't break it.
@@ -62,7 +63,7 @@ await withGamePage(async (page) => {
     const rejectedStepMessages = await panel.getByRole('alert').allInnerTexts()
     assert.deepEqual(rejectedStepMessages, [], `${step} was rejected`)
   }
-  await expectState(tutorial.getByText(`cup Cup ${letters[1]} too`), `the tutorial did not move on to Cup ${letters[1]}`)
+  await expectState(tutorial.getByText(`give Cup ${letters[1]} the same steps`), `the tutorial did not move on to Cup ${letters[1]}`)
   console.log(`Cupped Cup ${letters[0]}: ${await cueLog.count()} Tasting Cues; the tutorial moves on to Cup ${letters[1]}`)
   await screenshot(page, 'screenshots/play-2-cupped.png')
 
