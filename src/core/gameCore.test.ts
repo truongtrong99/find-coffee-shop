@@ -1105,7 +1105,7 @@ describe('the Lab Map', () => {
           name: 'Test Lab 3',
           starsToUnlock: 18,
           unlocked: false,
-          sessions: [{ id: 'lab-3-session-1', name: 'Three-cup Test Session in Lab 3', bestStars: 0, tutorial: false }],
+          sessions: [{ id: 'lab-3-session-1', name: 'Five-cup Test Session in Lab 3', bestStars: 0, tutorial: false }],
         },
       ],
     })
@@ -1853,15 +1853,15 @@ describe('content validation', () => {
     { problem: 'a Reference Score missing an Attribute', change: changeTestSessionCup(0, (cup) => ({ ...cup, referenceScore: { ...cup.referenceScore, sweetness: undefined as unknown as Rating } })), reason: /Cup A in "Test Session".*Reference Score.*Sweetness/ },
     { problem: 'a missing tasting note', change: changeTestSessionCup(0, (cup) => ({ ...cup, tastingNotes: { ...cup.tastingNotes, acidity: { ...cup.tastingNotes.acidity, 2: '' } } })), reason: /Cup A in "Test Session".*no tasting note for Acidity 2/ },
     { problem: 'the wrong cup count for its Lab', change: (c: GameContent) => (c.labs[1]!.sessions[0]!.cups = c.labs[1]!.sessions[0]!.cups.slice(0, 3)), reason: '"Four-cup Test Session" has 3 Blind Cups, but every Cupping Session in Test Lab 2 has 4' },
-    { problem: 'too few cups per Cupping Session for a Lab', change: (c: GameContent) => (c.labs[0]!.cupsPerSession = 2), reason: 'Test Lab has 2 Blind Cups per Cupping Session; it must have 3 to 5' },
-    { problem: 'too many cups per Cupping Session for a Lab', change: (c: GameContent) => (c.labs[1]!.cupsPerSession = 6), reason: 'Test Lab 2 has 6 Blind Cups per Cupping Session; it must have 3 to 5' },
+    { problem: 'Lab 1 cupping four Blind Cups', change: (c: GameContent) => (c.labs[0]!.sessions[2]!.cups = c.labs[1]!.sessions[0]!.cups), reason: '"Second Test Session" has 4 Blind Cups, but every Cupping Session in Test Lab has 3' },
+    { problem: 'Lab 3 cupping four Blind Cups', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.cups = c.labs[2]!.sessions[0]!.cups.slice(0, 4)), reason: '"Five-cup Test Session in Lab 3" has 4 Blind Cups, but every Cupping Session in Test Lab 3 has 5' },
     { problem: 'too few Seats', change: (c: GameContent) => (c.labs[2]!.seats = 1), reason: 'Test Lab 3 has 1 Seat; it must have 2 to 4' },
     { problem: 'too many Seats', change: (c: GameContent) => (c.labs[2]!.seats = 5), reason: 'Test Lab 3 has 5 Seats; it must have 2 to 4' },
     { problem: 'cup letters out of order', change: changeTestSessionCup(1, (cup) => ({ ...cup, letter: 'C' })), reason: '"Test Session" letters its Blind Cups A, C, C; they must run A, B, C' },
     { problem: 'a duplicate Lab id', change: (c: GameContent) => (c.labs[2]!.id = 'lab-1'), reason: 'Duplicate Lab id "lab-1"' },
     { problem: 'a duplicate Cupping Session id across Labs', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.id = 'lab-1-session-1'), reason: 'Duplicate Cupping Session id "lab-1-session-1"' },
     { problem: 'a duplicate NPC Cupper id', change: (c: GameContent) => (c.npcCuppers[4]!.id = 'pip'), reason: 'Duplicate NPC Cupper id "pip"' },
-    { problem: 'an origin cupped in an earlier Lab', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.cups = c.labs[0]!.sessions[0]!.cups), reason: '"Origin A" in Test Lab 3 is not new to that Lab: it is already cupped in Test Lab' },
+    { problem: 'an origin cupped in an earlier Lab', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.cups = c.labs[2]!.sessions[0]!.cups.map((cup, i) => (i === 0 ? { ...cup, origin: 'Origin A' } : cup))), reason: '"Origin A" in Test Lab 3 is not new to that Lab: it is already cupped in Test Lab' },
     { problem: 'an unlock rule naming a missing Cupping Session', change: (c: GameContent) => (c.npcCuppers[3]!.unlock = { kind: 'three-stars', sessionId: 'lab-9-session-1' }), reason: /Biscuit.*no Cupping Session "lab-9-session-1"/ },
   ])('rejects content with $problem when the Game Core is constructed', ({ change, reason }) => {
     expect(contentWith(change)).toThrow(GameRuleError)

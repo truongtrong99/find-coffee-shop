@@ -7,7 +7,9 @@ import { ATTRIBUTES } from './types'
 import type { BlindCupContent, CuppingSessionContent, GameContent, LabContent, Rating } from './types'
 
 const SEATS = { min: 2, max: 4 }
-const CUPS_PER_SESSION = { min: 3, max: 5 }
+/** Blind Cups per Cupping Session in the first Lab, and the most any Lab has. */
+const FIRST_LAB_CUPS = 3
+const MOST_CUPS = 5
 const CUP_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const RATINGS: readonly Rating[] = [1, 2, 3, 4, 5]
 
@@ -20,7 +22,7 @@ export function assertValidContent(content: GameContent): void {
   assertUniqueIds('Lab', content.labs)
   assertUniqueIds('Cupping Session', content.labs.flatMap((lab) => lab.sessions))
   assertUniqueIds('NPC Cupper', content.npcCuppers)
-  for (const lab of content.labs) assertValidLab(lab)
+  for (const [labIndex, lab] of content.labs.entries()) assertValidLab(lab, labIndex)
   assertOriginsNewToEachLab(content.labs)
   assertValidTutorials(content.labs, content.npcCuppers)
   assertValidUnlockRules(content)
@@ -34,16 +36,12 @@ function assertUniqueIds(kind: string, items: readonly { id: string }[]): void {
   }
 }
 
-function assertValidLab(lab: LabContent): void {
+function assertValidLab(lab: LabContent, labIndex: number): void {
   if (!(Number.isInteger(lab.seats) && lab.seats >= SEATS.min && lab.seats <= SEATS.max)) {
     throw new GameRuleError(`${lab.name} has ${lab.seats} Seat${lab.seats === 1 ? '' : 's'}; it must have ${SEATS.min} to ${SEATS.max}`)
   }
-  const cups = lab.cupsPerSession
-  if (!(Number.isInteger(cups) && cups >= CUPS_PER_SESSION.min && cups <= CUPS_PER_SESSION.max)) {
-    throw new GameRuleError(
-      `${lab.name} has ${cups} Blind Cups per Cupping Session; it must have ${CUPS_PER_SESSION.min} to ${CUPS_PER_SESSION.max}`,
-    )
-  }
+  // Difficulty rises Lab by Lab: 3 Blind Cups, then 4, then 5.
+  const cups = Math.min(MOST_CUPS, FIRST_LAB_CUPS + labIndex)
   for (const session of lab.sessions) {
     if (session.cups.length !== cups) {
       throw new GameRuleError(

@@ -39,7 +39,20 @@ export function npcCharacter(id: string, castIndex: number): CharacterModel {
 }
 
 export const characterUrl = (model: CharacterModel) => `${MODELS}/kenney-mini-characters/${model}.glb`
-export const furnitureUrl = (model: string) => `${MODELS}/kenney-furniture-kit/${model}.glb`
+export const furnitureUrl = (model: FurnitureModel) => `${MODELS}/kenney-furniture-kit/${model}.glb`
+/** The furniture models shipped under public/models/kenney-furniture-kit. */
+export type FurnitureModel =
+  | 'tableCloth'
+  | 'rugRectangle'
+  | 'kitchenCabinet'
+  | 'kitchenCoffeeMachine'
+  | 'plantSmall1'
+  | 'plantSmall2'
+  | 'pottedPlant'
+  | 'bookcaseOpen'
+  | 'books'
+  | 'lampSquareFloor'
+  | 'sideTable'
 export const CUPPING_BOWL_URL = `${MODELS}/kenney-food-kit/bowl.glb`
 
 /** The size to fit a model to; a model given one dimension keeps its proportions, given several it stretches to them. */
@@ -53,8 +66,8 @@ export interface Fit {
 function fitTo(object: Object3D, { width, height, depth }: Fit): void {
   const size = new Box3().setFromObject(object).getSize(new Vector3())
   const scales = [width && width / size.x, height && height / size.y, depth && depth / size.z]
-  const uniform = scales.filter((scale): scale is number => !!scale)
-  if (uniform.length === 1) object.scale.setScalar(uniform[0]!)
+  const given = scales.filter((scale): scale is number => !!scale)
+  if (given.length === 1) object.scale.setScalar(given[0]!)
   else object.scale.set(scales[0] || 1, scales[1] || 1, scales[2] || 1)
   object.position.set(0, 0, 0)
   const box = new Box3().setFromObject(object)
@@ -71,25 +84,32 @@ function withShadows(object: Object3D): Object3D {
   return object
 }
 
+/** A fresh copy of a loaded model, with shadows, fitted to `fit`; `copy` clones it (skinned characters need their own skeleton). */
+function useFittedCopy(scene: Object3D, fit: Fit, copy: (scene: Object3D) => Object3D): Object3D {
+  return useMemo(() => {
+    const object = withShadows(copy(scene))
+    fitTo(object, fit)
+    return object
+    // `copy` is always one of two stable functions.
+  }, [scene, fit.width, fit.height, fit.depth, copy])
+}
+
+const cloneStatic = (scene: Object3D) => scene.clone(true)
+
 /** A static model fitted to `fit`. Suspends while it loads. */
 export function FittedModel({ url, fit }: { url: string; fit: Fit }) {
   const { scene } = useGLTF(url)
-  const object = useMemo(() => {
-    const copy = withShadows(scene.clone(true))
-    fitTo(copy, fit)
-    return copy
-  }, [scene, fit.width, fit.height, fit.depth])
-  return <primitive object={object} />
+  return <primitive object={useFittedCopy(scene, fit, cloneStatic)} />
 }
 
+/** The animations the character models are played in. */
+export type CharacterAnimation = 'idle' | 'interact-right'
+
 /** A rigged character fitted to `height`, playing `animation` on a loop. Suspends while it loads. */
-export function CharacterModelView({ model, height, animation }: { model: CharacterModel; height: number; animation: string }) {
+export function CharacterModelView({ model, height, animation }: { model: CharacterModel; height: number; animation: CharacterAnimation }) {
   const { scene, animations } = useGLTF(characterUrl(model))
-  const object = useMemo(() => {
-    const copy = withShadows(cloneSkinned(scene))
-    fitTo(copy, { height })
-    return copy
-  }, [scene, height])
+  const fit = useMemo(() => ({ height }), [height])
+  const object = useFittedCopy(scene, fit, cloneSkinned)
   const { actions } = useAnimations(animations, object)
   useEffect(() => {
     const action = actions[animation]

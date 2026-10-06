@@ -8,11 +8,11 @@ import { useGameStore } from '../store'
 import { speak } from '../voiceBlips'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
-import { LabProps, Table, TABLE_HALF_WIDTH } from './LabProps'
+import { LabProps, Table, TABLE_HALF_WIDTH, TABLE_TOP_HEIGHT } from './LabProps'
 import { npcCharacter, PLAYER_CHARACTER } from './models'
 
 const CUP_SPACING = 1.3
-const CUP_TABLE_HEIGHT = 1
+const CUP_TABLE_HEIGHT = TABLE_TOP_HEIGHT
 /** The widest the row of cups gets, centre to centre, leaving room on the table for the last cup's thermometer. */
 const CUP_ROW_WIDTH = (TABLE_HALF_WIDTH - 0.75) * 2
 

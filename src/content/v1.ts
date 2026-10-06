@@ -432,7 +432,6 @@ export const content: GameContent = {
       name: 'The First Lab',
       starsToUnlock: 0,
       seats: 2,
-      cupsPerSession: 3,
       sessions: [
         // The tutorial: three coffees as different as can be.
         { ...session('lab-1-session-1', 'First Cupping', [yirgacheffe, mandheling, tarrazu]), tutorial: { lineup: ['pip', 'mochi'] } },
@@ -446,7 +445,6 @@ export const content: GameContent = {
       name: 'The Roastery Lab',
       starsToUnlock: 8,
       seats: 3,
-      cupsPerSession: 4,
       sessions: [
         session('lab-2-session-1', 'Four Corners', [nyeri, kona, cajamarca, yunnan]),
         session('lab-2-session-2', "Roaster's Choice", [marcala, haraz, chiapas, bolaven]),
@@ -459,7 +457,6 @@ export const content: GameContent = {
       name: 'The Competition Lab',
       starsToUnlock: 18,
       seats: 4,
-      cupsPerSession: 5,
       sessions: [
         session('lab-3-session-1', 'Five Flights', [huye, boquete, chikmagalur, kilimanjaro, santaAna]),
         session('lab-3-session-2', "Cuppers' Table", [jinotega, kayanza, galapagos, mountElgon, easternHighlands]),

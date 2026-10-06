@@ -98,8 +98,7 @@ export interface LabContent {
   starsToUnlock: number
   /** Seats at the cupping table for NPC Cuppers, 2–4. */
   seats: number
-  /** Blind Cups in every one of its Cupping Sessions, 3–5. */
-  cupsPerSession: number
+  /** Its Cupping Sessions, each with as many Blind Cups as the Lab's place calls for: 3 in the first Lab, 4 in the second, 5 from the third. */
   sessions: CuppingSessionContent[]
 }
 
