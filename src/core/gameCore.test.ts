@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { makeTestContent } from '../content/testContent'
 import type { TestTuningOverrides } from '../content/testContent'
+import { content as v1 } from '../content/v1'
 import { ATTRIBUTES, createGameCore, createMemorySaveStore, createSeededRandom, GameRuleError } from '.'
-import type { Attribute, GameContent, Rating, SaveStore, StarCount } from '.'
+import type { Attribute, BlindCupContent, GameContent, Rating, SaveStore, StarCount } from '.'
 
 const SESSION = 'lab-1-session-1'
 
@@ -1822,5 +1823,120 @@ describe('tutorial content', () => {
   ])("rejects a tutorial that is not Lab 1's first Cupping Session, playable on first launch: $problem", ({ change, reason }) => {
     expect(contentWithTutorial(change)).toThrow(GameRuleError)
     expect(contentWithTutorial(change)).toThrow(reason)
+  })
+})
+
+describe('content validation', () => {
+  /** Constructing the Game Core from test content changed by `change`. */
+  function contentWith(change: (content: GameContent) => void) {
+    const content = makeTestContent()
+    change(content)
+    return () => createGameCore({ content, saveStore: createMemorySaveStore(), random: createSeededRandom(1) })
+  }
+
+  /** Replaces Cup `cupIndex` of `"Test Session"` (Lab 1's second Cupping Session) without touching the shared fixture cups. */
+  function changeTestSessionCup(cupIndex: number, change: (cup: BlindCupContent) => BlindCupContent) {
+    return (c: GameContent) => {
+      const session = c.labs[0]!.sessions[1]!
+      session.cups = session.cups.map((cup, i) => (i === cupIndex ? change(cup) : cup))
+    }
+  }
+
+  it('accepts the test content', () => {
+    expect(contentWith(() => {})).not.toThrow()
+  })
+
+  it.each([
+    { problem: 'a Reference Score above 5', change: changeTestSessionCup(0, (cup) => ({ ...cup, referenceScore: { ...cup.referenceScore, aroma: 6 as Rating } })), reason: /Cup A in "Test Session".*Reference Score.*Aroma.*6.*1 to 5/ },
+    { problem: 'a Reference Score below 1', change: changeTestSessionCup(1, (cup) => ({ ...cup, referenceScore: { ...cup.referenceScore, body: 0 as Rating } })), reason: /Cup B in "Test Session".*Reference Score.*Body.*0.*1 to 5/ },
+    { problem: 'a Reference Score between whole cups', change: changeTestSessionCup(2, (cup) => ({ ...cup, referenceScore: { ...cup.referenceScore, acidity: 2.5 as Rating } })), reason: /Cup C in "Test Session".*Reference Score.*Acidity.*2.5.*1 to 5/ },
+    { problem: 'a Reference Score missing an Attribute', change: changeTestSessionCup(0, (cup) => ({ ...cup, referenceScore: { ...cup.referenceScore, sweetness: undefined as unknown as Rating } })), reason: /Cup A in "Test Session".*Reference Score.*Sweetness/ },
+    { problem: 'a missing tasting note', change: changeTestSessionCup(0, (cup) => ({ ...cup, tastingNotes: { ...cup.tastingNotes, acidity: { ...cup.tastingNotes.acidity, 2: '' } } })), reason: /Cup A in "Test Session".*no tasting note for Acidity 2/ },
+    { problem: 'the wrong cup count for its Lab', change: (c: GameContent) => (c.labs[1]!.sessions[0]!.cups = c.labs[1]!.sessions[0]!.cups.slice(0, 3)), reason: '"Four-cup Test Session" has 3 Blind Cups, but every Cupping Session in Test Lab 2 has 4' },
+    { problem: 'too few cups per Cupping Session for a Lab', change: (c: GameContent) => (c.labs[0]!.cupsPerSession = 2), reason: 'Test Lab has 2 Blind Cups per Cupping Session; it must have 3 to 5' },
+    { problem: 'too many cups per Cupping Session for a Lab', change: (c: GameContent) => (c.labs[1]!.cupsPerSession = 6), reason: 'Test Lab 2 has 6 Blind Cups per Cupping Session; it must have 3 to 5' },
+    { problem: 'too few Seats', change: (c: GameContent) => (c.labs[2]!.seats = 1), reason: 'Test Lab 3 has 1 Seat; it must have 2 to 4' },
+    { problem: 'too many Seats', change: (c: GameContent) => (c.labs[2]!.seats = 5), reason: 'Test Lab 3 has 5 Seats; it must have 2 to 4' },
+    { problem: 'cup letters out of order', change: changeTestSessionCup(1, (cup) => ({ ...cup, letter: 'C' })), reason: '"Test Session" letters its Blind Cups A, C, C; they must run A, B, C' },
+    { problem: 'a duplicate Lab id', change: (c: GameContent) => (c.labs[2]!.id = 'lab-1'), reason: 'Duplicate Lab id "lab-1"' },
+    { problem: 'a duplicate Cupping Session id across Labs', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.id = 'lab-1-session-1'), reason: 'Duplicate Cupping Session id "lab-1-session-1"' },
+    { problem: 'a duplicate NPC Cupper id', change: (c: GameContent) => (c.npcCuppers[4]!.id = 'pip'), reason: 'Duplicate NPC Cupper id "pip"' },
+    { problem: 'an origin cupped in an earlier Lab', change: (c: GameContent) => (c.labs[2]!.sessions[0]!.cups = c.labs[0]!.sessions[0]!.cups), reason: '"Origin A" in Test Lab 3 is not new to that Lab: it is already cupped in Test Lab' },
+    { problem: 'an unlock rule naming a missing Cupping Session', change: (c: GameContent) => (c.npcCuppers[3]!.unlock = { kind: 'three-stars', sessionId: 'lab-9-session-1' }), reason: /Biscuit.*no Cupping Session "lab-9-session-1"/ },
+  ])('rejects content with $problem when the Game Core is constructed', ({ change, reason }) => {
+    expect(contentWith(change)).toThrow(GameRuleError)
+    expect(contentWith(change)).toThrow(reason)
+  })
+
+  it('lets an origin return within the Lab that introduced it', () => {
+    expect(contentWith((c) => (c.labs[0]!.sessions[3]!.cups = c.labs[0]!.sessions[1]!.cups))).not.toThrow()
+  })
+})
+
+describe('the shipped v1 content', () => {
+  /** Every Cupping Session 3-starred, so every Lab and NPC Cupper is unlocked. */
+  function everyLabUnlocked() {
+    const bestStars = Object.fromEntries(v1.labs.flatMap((lab) => lab.sessions).map((session) => [session.id, 3]))
+    return createGameCore({
+      content: v1,
+      saveStore: createMemorySaveStore(JSON.stringify({ version: 1, bestStars })),
+      random: createSeededRandom(1),
+    })
+  }
+
+  it('validates when the Game Core is constructed', () => {
+    expect(() => createGameCore({ content: v1, saveStore: createMemorySaveStore(), random: createSeededRandom(1) })).not.toThrow()
+  })
+
+  it('has 3 Labs of 4 Cupping Sessions, unlocking at 0, 8 and 18 total Stars', () => {
+    const labs = createGameCore({ content: v1, saveStore: createMemorySaveStore(), random: createSeededRandom(1) }).getLabMap().labs
+
+    expect(labs.map((lab) => lab.sessions.length)).toEqual([4, 4, 4])
+    expect(labs.map((lab) => lab.starsToUnlock)).toEqual([0, 8, 18])
+  })
+
+  it('puts 3, 4 and 5 Blind Cups on the table in Lab 1, 2 and 3, around a table of 2, 3 and 4 Seats', () => {
+    const game = everyLabUnlocked()
+    const perLab = game.getLabMap().labs.map((lab) =>
+      lab.sessions.map((session) => {
+        game.startAttempt(session.id, game.getLineupOptions(session.id).prefilledLineup?.map((npc) => npc.id) ?? [])
+        const cups = game.getAttempt()!.cups.length
+        game.leaveLab()
+        return { cups, seats: game.getLineupOptions(session.id).seats }
+      }),
+    )
+
+    expect(perLab).toEqual([3, 4, 5].map((cups, i) => Array(4).fill({ cups, seats: i + 2 })))
+  })
+
+  it('reveals origins in each Lab that no earlier Lab has', () => {
+    const game = everyLabUnlocked()
+    const originsPerLab = game.getLabMap().labs.map((lab) => {
+      const origins = new Set<string>()
+      for (const session of lab.sessions) {
+        game.startAttempt(session.id, game.getLineupOptions(session.id).prefilledLineup?.map((npc) => npc.id) ?? [])
+        for (const cup of game.getAttempt()!.cups) for (const attribute of ATTRIBUTES) game.setRating(cup.letter, attribute, 3)
+        for (const cup of game.submit().cups) origins.add(cup.origin)
+      }
+      return origins
+    })
+
+    originsPerLab.forEach((origins, i) => {
+      expect(origins.size).toBeGreaterThan(0)
+      for (const earlier of originsPerLab.slice(0, i)) expect([...origins].filter((origin) => earlier.has(origin))).toEqual([])
+    })
+  })
+
+  it('has 6–8 NPC Cuppers: 2 starters, the rest unlocking at 6, 12 or 24 total Stars or by 3-starring a Cupping Session', () => {
+    const journal = createGameCore({ content: v1, saveStore: createMemorySaveStore(), random: createSeededRandom(1) }).getCupperJournal()
+
+    expect(journal.length).toBeGreaterThanOrEqual(6)
+    expect(journal.length).toBeLessThanOrEqual(8)
+    expect(journal.filter((entry) => entry.unlock.kind === 'starter').map((entry) => entry.unlocked)).toEqual([true, true])
+    for (const { unlock, unlocked } of journal.filter((entry) => entry.unlock.kind !== 'starter')) {
+      expect(unlocked).toBe(false)
+      if (unlock.kind === 'total-stars') expect([6, 12, 24]).toContain(unlock.stars)
+    }
+    expect(journal.some((entry) => entry.unlock.kind === 'three-stars')).toBe(true)
   })
 })

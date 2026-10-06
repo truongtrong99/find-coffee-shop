@@ -1,4 +1,5 @@
-import { assertValidTastingTuning, isStoneCold, windowPosition } from './accuracyWindows'
+import { isStoneCold, windowPosition } from './accuracyWindows'
+import { assertValidContent } from './content'
 import { createCoolingCurve } from './cooling'
 import { assertStepAllowed, cuesForStep } from './cupping'
 import type { CueConditions } from './cupping'
@@ -7,7 +8,6 @@ import { biasesShown, cupperJournal } from './cupperJournal'
 import { npcRemark, npcScoreCard, planSchedule, seatLineup, summarize } from './npcCuppers'
 import type { RandomSource, SaveStore } from './ports'
 import {
-  assertValidUnlockRules,
   describeUnlock,
   isLabUnlocked,
   labMap,
@@ -18,7 +18,7 @@ import {
 } from './progression'
 import type { Progress } from './progression'
 import { ATTRIBUTE_NAMES, isRating, mapAttributes, revealAttempt, unratedAttributes } from './scoring'
-import { assertTutorialLineup, assertValidTutorials, tutorialPrompt } from './tutorial'
+import { assertTutorialLineup, tutorialPrompt } from './tutorial'
 import type {
   AttemptState,
   Attribute,
@@ -95,9 +95,7 @@ type AttemptProgress = Omit<AttemptState, 'cups' | 'npcCuppers' | 'canSubmit' | 
 
 export function createGameCore({ content, saveStore, random }: GameCoreDeps): GameCore {
   const cooling = createCoolingCurve(content.tuning.cooling)
-  assertValidTastingTuning(content.tuning.tasting)
-  assertValidTutorials(content.labs, content.npcCuppers)
-  assertValidUnlockRules(content)
+  assertValidContent(content)
   const { temperatureAt } = cooling
   const { accuracyWindows } = content.tuning.tasting
   const { stoneColdTemperature } = content.tuning.cooling
