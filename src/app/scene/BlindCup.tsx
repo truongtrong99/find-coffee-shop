@@ -1,14 +1,16 @@
 import { Html } from '@react-three/drei'
-import type { RefObject } from 'react'
+import { Suspense, type RefObject } from 'react'
 import { Color } from 'three'
 import { content } from '../../content/v1'
 import type { FreshCues } from '../store'
+import { CUPPING_BOWL_URL, FittedModel } from './models'
 import { AromaBurst, CueIcons, Steam } from './TastingEffects'
 
 const { ambientTemperature, startTemperature } = content.tuning.cooling
 const HOT = new Color('#e8452c')
 const COLD = new Color('#4aa3e0')
 const THERMOMETER_HEIGHT = 0.9
+const BOWL_FIT = { width: 0.9, height: 0.5 }
 
 interface BlindCupProps {
   letter: string
@@ -77,12 +79,12 @@ export function BlindCup({
           <meshStandardMaterial color="#e07a5f" />
         </mesh>
       )}
-      <mesh position={[0, 0.25, 0]} castShadow>
-        <cylinderGeometry args={[0.45, 0.35, 0.5, 32]} />
-        <meshStandardMaterial color="#fffaf0" />
-      </mesh>
-      <mesh position={[0, 0.505, 0]}>
-        <cylinderGeometry args={[0.4, 0.4, 0.01, 32]} />
+      {/* The cupping bowl, a CC0 model that can be swapped here, filled with coffee to the brim. */}
+      <Suspense fallback={null}>
+        <FittedModel url={CUPPING_BOWL_URL} fit={BOWL_FIT} />
+      </Suspense>
+      <mesh position={[0, 0.47, 0]}>
+        <cylinderGeometry args={[0.36, 0.36, 0.01, 32]} />
         <meshStandardMaterial color="#4b2c1a" />
       </mesh>
       <Thermometer temperature={temperature} />

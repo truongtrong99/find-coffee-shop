@@ -8,12 +8,17 @@ import { useGameStore } from '../store'
 import { speak } from '../voiceBlips'
 import { BlindCup } from './BlindCup'
 import { Cupper } from './Cupper'
+import { LabProps, Table, TABLE_HALF_WIDTH } from './LabProps'
+import { npcCharacter, PLAYER_CHARACTER } from './models'
 
 const CUP_SPACING = 1.3
 const CUP_TABLE_HEIGHT = 1
+/** The widest the row of cups gets, centre to centre, leaving room on the table for the last cup's thermometer. */
+const CUP_ROW_WIDTH = (TABLE_HALF_WIDTH - 0.75) * 2
 
 function cupX(index: number, count: number) {
-  return index * CUP_SPACING - ((count - 1) * CUP_SPACING) / 2
+  const spacing = count > 1 ? Math.min(CUP_SPACING, CUP_ROW_WIDTH / (count - 1)) : 0
+  return index * spacing - ((count - 1) * spacing) / 2
 }
 
 const NO_CUPS: BlindCupState[] = []
@@ -23,17 +28,16 @@ const PLAYER_POSITION: [number, number, number] = [0, 0, 2.2]
 const SEAT_POSITIONS: [number, number, number][] = [
   [-1.1, 0, -2.2],
   [1.1, 0, -2.2],
-  [-3.1, 0, 0],
-  [3.1, 0, 0],
+  [-(TABLE_HALF_WIDTH + 0.8), 0, 0],
+  [TABLE_HALF_WIDTH + 0.8, 0, 0],
 ]
-const NPC_COLORS = ['#81b29a', '#f2cc8f', '#9c89b8', '#6d9dc5', '#f4a261', '#90be6d', '#c77dff', '#4d908e']
 const TABLE_CENTRE: [number, number] = [0, 0]
 
 /** Game seconds an NPC Cupper is shown performing a Cupping Step; following the core's clock. */
 const STEP_SHOWN_GAME_SECONDS = 2.5
 /** Real seconds an NPC Cupper's remark stays in its speech bubble, long enough to read at any speed. */
 const REMARK_SHOWN_REAL_SECONDS = 3.5
-/** Each NPC Cupper's voice blips, by their colour, so Cuppers sound apart. */
+/** Each NPC Cupper's voice blips, by their place in the cast, so Cuppers sound apart. */
 const NPC_VOICES_HZ = [330, 440, 262, 392, 294, 494, 349, 220]
 
 interface CameraPose {
@@ -77,34 +81,6 @@ function CameraRig({ firstPersonX }: { firstPersonX: number | null }) {
     camera.lookAt(lookAt.current)
   })
   return null
-}
-
-function Wall({ position, size }: { position: [number, number, number]; size: [number, number, number] }) {
-  return (
-    <mesh position={position} receiveShadow>
-      <boxGeometry args={size} />
-      <meshStandardMaterial color="#f2d9b5" />
-    </mesh>
-  )
-}
-
-function Table() {
-  return (
-    <group>
-      <mesh position={[0, 0.9, 0]} castShadow receiveShadow>
-        <boxGeometry args={[4.6, 0.2, 2]} />
-        <meshStandardMaterial color="#b9794a" />
-      </mesh>
-      {[-2, 2].flatMap((x) =>
-        [-0.8, 0.8].map((z) => (
-          <mesh key={`${x}${z}`} position={[x, 0.4, z]} castShadow>
-            <boxGeometry args={[0.2, 0.8, 0.2]} />
-            <meshStandardMaterial color="#8a5a36" />
-          </mesh>
-        )),
-      )}
-    </group>
-  )
 }
 
 interface SeatedNpc {
@@ -160,22 +136,22 @@ function useSpokenRemark(latestRemark: SeatedNpc['latestRemark'], voiceHz: numbe
 
 interface NpcCupperProps extends SeatedNpc {
   seat: number
-  colorIndex: number
+  castIndex: number
   cups: BlindCupState[]
   elapsed: number
   labelLayer: RefObject<HTMLDivElement | null>
   showLabels: boolean
 }
 
-function NpcCupper({ name, latestStep, latestRemark, seat, colorIndex, cups, elapsed, labelLayer, showLabels }: NpcCupperProps) {
-  const speaking = useSpokenRemark(latestRemark, NPC_VOICES_HZ[colorIndex % NPC_VOICES_HZ.length] ?? NPC_VOICES_HZ[0]!)
+function NpcCupper({ id, name, latestStep, latestRemark, seat, castIndex, cups, elapsed, labelLayer, showLabels }: NpcCupperProps) {
+  const speaking = useSpokenRemark(latestRemark, NPC_VOICES_HZ[castIndex % NPC_VOICES_HZ.length] ?? NPC_VOICES_HZ[0]!)
   const performing = latestStep && elapsed - latestStep.atSeconds < STEP_SHOWN_GAME_SECONDS ? latestStep : undefined
   const cupIndex = performing ? cups.findIndex((cup) => cup.letter === performing.cupLetter) : -1
   const remark = speaking?.remark
   return (
     <Cupper
       position={SEAT_POSITIONS[seat]!}
-      color={NPC_COLORS[colorIndex % NPC_COLORS.length]}
+      model={npcCharacter(id, castIndex)}
       facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
       leaning={cupIndex !== -1}
       labelLayer={labelLayer}
@@ -217,7 +193,7 @@ function NpcCuppers({ labelLayer, showLabels }: { labelLayer: RefObject<HTMLDivE
       key={npc.id}
       {...npc}
       seat={seat}
-      colorIndex={(options?.npcCuppers ?? []).findIndex((n) => n.id === npc.id)}
+      castIndex={(options?.npcCuppers ?? []).findIndex((n) => n.id === npc.id)}
       cups={cups}
       elapsed={elapsed}
       labelLayer={labelLayer}
@@ -235,6 +211,7 @@ function PlayerCupper({ cups, labelLayer }: { cups: BlindCupState[]; labelLayer:
   return (
     <Cupper
       position={PLAYER_POSITION}
+      model={PLAYER_CHARACTER}
       facing={cupIndex === -1 ? TABLE_CENTRE : [cupX(cupIndex, cups.length), 0]}
       leaning={cupIndex !== -1}
       labelLayer={labelLayer}
@@ -264,14 +241,7 @@ export function LabScene({ labelLayer }: { labelLayer: RefObject<HTMLDivElement 
       <ambientLight intensity={0.8} />
       <directionalLight position={[5, 10, 4]} intensity={1.6} castShadow />
 
-      {/* Diorama base and the two back walls */}
-      <mesh position={[0, -0.15, 0]} receiveShadow>
-        <boxGeometry args={[9, 0.3, 9]} />
-        <meshStandardMaterial color="#d8b48a" />
-      </mesh>
-      <Wall position={[0, 1.8, -4.4]} size={[9, 3.6, 0.2]} />
-      <Wall position={[-4.4, 1.8, 0]} size={[0.2, 3.6, 9]} />
-
+      <LabProps />
       <Table />
       {cups.map((cup, i) => (
         <BlindCup

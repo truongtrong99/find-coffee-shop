@@ -17,3 +17,7 @@ npm run play       # play scripted Attempts from the Lab Map, Leave Lab and relo
 Both browser scripts write to `screenshots/` (git-ignored) and exit non-zero on any browser console error or uncaught exception.
 
 The Game Core (`src/core`) is plain TypeScript and is tested only through its facade. The React Three Fiber layer (`src/app`) renders core state and passes elapsed time in; it never decides rules or timing.
+
+## Credits
+
+3D models are free CC0 packs by [Kenney](https://kenney.nl): Mini Characters, Furniture Kit and Food Kit, under `public/models/` with each pack's `License.txt`. Every model sits behind a component in `src/app/scene/` (`Cupper`, `BlindCup`, `LabProps`) and is fitted to a size there, so swapping a file needs no change to game logic.
